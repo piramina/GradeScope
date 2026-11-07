@@ -41,6 +41,14 @@ export default function RootLayout() {
         />
 
         <Stack.Screen
+          name="subjects"
+          options={{
+            title: "My Subjects",
+            headerShown: true,
+          }}
+        />
+
+        <Stack.Screen
           name="explore"
           options={{
             title: "Explore",

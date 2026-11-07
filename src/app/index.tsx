@@ -153,23 +153,46 @@ export default function Dashboard() {
           </View>
         </View>
 
-        {/* MANAGE SEMESTERS BUTTON */}
+        {/* MANAGE SEMESTERS */}
         <Pressable
           onPress={() => router.push("/semesters")}
           style={({ pressed }) => [
-            styles.semesterCard,
+            styles.manageCard,
             pressed && styles.pressed,
           ]}
         >
-          <View style={styles.semesterIcon}>
+          <View style={styles.manageIcon}>
             <CalendarDays size={23} color={C.blue} />
           </View>
 
-          <View style={styles.semesterText}>
-            <Text style={styles.semesterTitle}>Manage Semesters</Text>
+          <View style={styles.manageText}>
+            <Text style={styles.manageTitle}>Manage Semesters</Text>
 
-            <Text style={styles.semesterSubtitle}>
+            <Text style={styles.manageSubtitle}>
               Add, edit and organize your semesters
+            </Text>
+          </View>
+
+          <ChevronRight size={21} color={C.blue} />
+        </Pressable>
+
+        {/* MANAGE SUBJECTS */}
+        <Pressable
+          onPress={() => router.push("/subjects")}
+          style={({ pressed }) => [
+            styles.manageCard,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={styles.manageIcon}>
+            <BookOpen size={23} color={C.blue} />
+          </View>
+
+          <View style={styles.manageText}>
+            <Text style={styles.manageTitle}>Manage Subjects</Text>
+
+            <Text style={styles.manageSubtitle}>
+              Add subjects, credits and assessment types
             </Text>
           </View>
 
@@ -213,7 +236,7 @@ export default function Dashboard() {
           );
         })}
 
-        {/* DEVELOPMENT STATUS */}
+        {/* STATUS */}
         <View style={styles.noteCard}>
           <View style={styles.noteIcon}>
             <Clock3 size={20} color={C.blue} />
@@ -380,7 +403,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 5,
   },
-  semesterCard: {
+  manageCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: C.white,
@@ -388,9 +411,9 @@ const styles = StyleSheet.create({
     padding: 15,
     borderWidth: 1,
     borderColor: "#D8E3F7",
-    marginBottom: 29,
+    marginBottom: 13,
   },
-  semesterIcon: {
+  manageIcon: {
     width: 51,
     height: 51,
     borderRadius: 15,
@@ -398,16 +421,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  semesterText: {
+  manageText: {
     flex: 1,
     marginLeft: 13,
   },
-  semesterTitle: {
+  manageTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: C.text,
   },
-  semesterSubtitle: {
+  manageSubtitle: {
     fontSize: 11,
     color: C.muted,
     marginTop: 5,
