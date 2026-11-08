@@ -1,4 +1,15 @@
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
 import { router } from "expo-router";
+
 import {
   ArrowUpRight,
   BookOpen,
@@ -11,15 +22,6 @@ import {
   Target,
   TrendingUp,
 } from "lucide-react-native";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
 
 const C = {
   navy: "#142D60",
@@ -117,11 +119,13 @@ export default function Dashboard() {
           <View style={styles.heroBottom}>
             <View>
               <Text style={styles.heroSmallLabel}>Latest Semester GPA</Text>
+
               <Text style={styles.heroSmallValue}>3.48</Text>
             </View>
 
             <View>
               <Text style={styles.heroSmallLabel}>Completed Credits</Text>
+
               <Text style={styles.heroSmallValue}>22</Text>
             </View>
           </View>
@@ -130,6 +134,7 @@ export default function Dashboard() {
         {/* ACADEMIC OVERVIEW */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Academic Overview</Text>
+
           <ArrowUpRight size={19} color={C.blue} />
         </View>
 
@@ -140,6 +145,7 @@ export default function Dashboard() {
             </View>
 
             <Text style={styles.statValue}>2</Text>
+
             <Text style={styles.statLabel}>Semesters</Text>
           </View>
 
@@ -149,11 +155,12 @@ export default function Dashboard() {
             </View>
 
             <Text style={styles.statValue}>4</Text>
+
             <Text style={styles.statLabel}>Subjects</Text>
           </View>
         </View>
 
-        {/* MANAGE SEMESTERS */}
+        {/* MANAGE SEMESTERS BUTTON */}
         <Pressable
           onPress={() => router.push("/semesters")}
           style={({ pressed }) => [
@@ -176,7 +183,7 @@ export default function Dashboard() {
           <ChevronRight size={21} color={C.blue} />
         </Pressable>
 
-        {/* MANAGE SUBJECTS */}
+        {/* MANAGE SUBJECTS BUTTON */}
         <Pressable
           onPress={() => router.push("/subjects")}
           style={({ pressed }) => [
@@ -200,7 +207,7 @@ export default function Dashboard() {
         </Pressable>
 
         {/* QUICK ACTIONS */}
-        <View style={styles.sectionHeader}>
+        <View style={styles.quickHeader}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
         </View>
 
@@ -210,7 +217,13 @@ export default function Dashboard() {
           return (
             <Pressable
               key={action.title}
-              onPress={() => comingSoon(action.title)}
+              onPress={() => {
+                if (action.title === "ICA Calculator") {
+                  router.push("/ica");
+                } else {
+                  comingSoon(action.title);
+                }
+              }}
               style={({ pressed }) => [
                 styles.actionCard,
                 pressed && styles.pressed,
@@ -236,7 +249,7 @@ export default function Dashboard() {
           );
         })}
 
-        {/* STATUS */}
+        {/* DEVELOPMENT STATUS */}
         <View style={styles.noteCard}>
           <View style={styles.noteIcon}>
             <Clock3 size={20} color={C.blue} />
@@ -246,11 +259,12 @@ export default function Dashboard() {
             <Text style={styles.noteTitle}>Your academic assistant</Text>
 
             <Text style={styles.noteDescription}>
-              More academic features are coming soon.
+              New academic tools are being added.
             </Text>
           </View>
         </View>
 
+        {/* FOOTER */}
         <Text style={styles.footer}>Keep learning. Keep improving. 🎓</Text>
       </ScrollView>
     </View>
@@ -434,6 +448,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: C.muted,
     marginTop: 5,
+  },
+  quickHeader: {
+    marginTop: 18,
+    marginBottom: 15,
   },
   actionCard: {
     flexDirection: "row",

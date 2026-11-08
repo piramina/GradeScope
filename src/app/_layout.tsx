@@ -54,6 +54,14 @@ export default function RootLayout() {
             title: "Explore",
           }}
         />
+
+        <Stack.Screen
+          name="ica"
+          options={{
+            title: "ICA Calculator",
+            headerShown: true,
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );
