@@ -19,9 +19,11 @@ type AppState = "loading" | "welcome" | "ready" | "error";
 
 const database = SQLite.openDatabaseAsync("gradescope.db");
 
+// Keep false for normal app usage.
+// True is only for temporary Welcome screen preview.
 const DEV_PREVIEW_WELCOME = false;
 
-async function readWelcomeStatus() {
+async function readWelcomeStatus(): Promise<boolean> {
   const db = await database;
 
   await db.execAsync(`
@@ -93,7 +95,9 @@ export default function RootLayout() {
     return (
       <View style={styles.loading}>
         <StatusBar barStyle="light-content" />
+
         <ActivityIndicator size="large" color="#FFFFFF" />
+
         <Text style={styles.message}>Loading GradeScope...</Text>
       </View>
     );
@@ -102,6 +106,8 @@ export default function RootLayout() {
   if (appState === "error") {
     return (
       <View style={styles.loading}>
+        <StatusBar barStyle="light-content" />
+
         <Text style={styles.errorTitle}>Unable to start GradeScope</Text>
 
         <Text style={styles.message}>
@@ -136,6 +142,7 @@ export default function RootLayout() {
           animation: "slide_from_right",
         }}
       >
+        {/* DASHBOARD */}
         <Stack.Screen
           name="index"
           options={{
@@ -143,31 +150,48 @@ export default function RootLayout() {
           }}
         />
 
+        {/* SEMESTER MANAGER */}
         <Stack.Screen
           name="semesters"
           options={{
             title: "My Semesters",
+            headerShown: true,
           }}
         />
 
+        {/* SUBJECT MANAGER */}
         <Stack.Screen
           name="subjects"
           options={{
             title: "My Subjects",
+            headerShown: true,
           }}
         />
 
+        {/* ICA CALCULATOR */}
         <Stack.Screen
           name="ica"
           options={{
             title: "ICA Calculator",
+            headerShown: true,
           }}
         />
 
+        {/* FINAL EXAM PREDICTOR */}
+        <Stack.Screen
+          name="predictor"
+          options={{
+            title: "Final Exam Predictor",
+            headerShown: true,
+          }}
+        />
+
+        {/* EXISTING EXPLORE SCREEN */}
         <Stack.Screen
           name="explore"
           options={{
             title: "Explore",
+            headerShown: true,
           }}
         />
       </Stack>

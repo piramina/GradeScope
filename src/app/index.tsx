@@ -220,6 +220,8 @@ export default function Dashboard() {
               onPress={() => {
                 if (action.title === "ICA Calculator") {
                   router.push("/ica");
+                } else if (action.title === "Final Exam Predictor") {
+                  router.push("/predictor");
                 } else {
                   comingSoon(action.title);
                 }
@@ -264,7 +266,6 @@ export default function Dashboard() {
           </View>
         </View>
 
-        {/* FOOTER */}
         <Text style={styles.footer}>Keep learning. Keep improving. 🎓</Text>
       </ScrollView>
     </View>
@@ -276,35 +277,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.background,
   },
+
   content: {
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 50,
   },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 25,
   },
+
   headerText: {
     flex: 1,
   },
+
   greeting: {
     fontSize: 14,
     color: C.muted,
     marginBottom: 5,
   },
+
   heading: {
     fontSize: 29,
     fontWeight: "800",
     color: C.text,
   },
+
   subheading: {
     fontSize: 13,
     color: C.muted,
     marginTop: 5,
   },
+
   headerIcon: {
     width: 55,
     height: 55,
@@ -314,33 +322,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 10,
   },
+
   hero: {
     backgroundColor: C.navy,
     borderRadius: 25,
     padding: 24,
     marginBottom: 27,
   },
+
   heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
+
   heroLabel: {
     color: "#BDD1FF",
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 1.3,
   },
+
   heroValue: {
     color: C.white,
     fontSize: 43,
     fontWeight: "800",
     marginTop: 8,
   },
+
   heroMax: {
     color: "#C7D8FF",
     fontSize: 17,
     fontWeight: "500",
   },
+
   heroBadge: {
     width: 35,
     height: 35,
@@ -349,47 +363,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   heroDescription: {
     color: "#D5E0FA",
     fontSize: 12,
     marginTop: 10,
     lineHeight: 19,
   },
+
   heroDivider: {
     height: 1,
     backgroundColor: "#426098",
     marginVertical: 22,
   },
+
   heroBottom: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
+
   heroSmallLabel: {
     color: "#BDD1FF",
     fontSize: 11,
     marginBottom: 7,
   },
+
   heroSmallValue: {
     color: C.white,
     fontSize: 22,
     fontWeight: "700",
   },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 15,
   },
+
   sectionTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: C.text,
   },
+
   statsRow: {
     flexDirection: "row",
     gap: 12,
     marginBottom: 19,
   },
+
   statCard: {
     flex: 1,
     backgroundColor: C.white,
@@ -398,6 +421,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
+
   statIcon: {
     width: 42,
     height: 42,
@@ -407,16 +431,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
+
   statValue: {
     fontSize: 27,
     fontWeight: "800",
     color: C.text,
   },
+
   statLabel: {
     color: C.muted,
     fontSize: 12,
     marginTop: 5,
   },
+
   manageCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -427,6 +454,7 @@ const styles = StyleSheet.create({
     borderColor: "#D8E3F7",
     marginBottom: 13,
   },
+
   manageIcon: {
     width: 51,
     height: 51,
@@ -435,24 +463,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
   manageText: {
     flex: 1,
     marginLeft: 13,
   },
+
   manageTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: C.text,
   },
+
   manageSubtitle: {
     fontSize: 11,
     color: C.muted,
     marginTop: 5,
   },
+
   quickHeader: {
     marginTop: 18,
     marginBottom: 15,
   },
+
   actionCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -463,6 +496,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     marginBottom: 12,
   },
+
   actionIcon: {
     width: 51,
     height: 51,
@@ -470,20 +504,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
   actionText: {
     flex: 1,
     marginLeft: 14,
   },
+
   actionTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: C.text,
   },
+
   actionSubtitle: {
     fontSize: 11,
     color: C.muted,
     marginTop: 5,
   },
+
   noteCard: {
     backgroundColor: "#EAF1FF",
     padding: 16,
@@ -492,6 +530,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 15,
   },
+
   noteIcon: {
     width: 39,
     height: 39,
@@ -501,22 +540,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
+
   noteTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: C.navy,
   },
+
   noteDescription: {
     fontSize: 11,
     color: "#59709B",
     marginTop: 4,
   },
+
   footer: {
     textAlign: "center",
     marginTop: 29,
     color: C.muted,
     fontSize: 12,
   },
+
   pressed: {
     opacity: 0.7,
   },
