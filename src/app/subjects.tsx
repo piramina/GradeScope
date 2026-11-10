@@ -1,14 +1,19 @@
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import {
   BookOpen,
+  CalendarDays,
   Check,
-  Layers3,
+  ChevronDown,
+  ChevronUp,
+  GraduationCap,
+  Layers,
   Pencil,
   Plus,
+  Save,
   Trash2,
   X,
 } from "lucide-react-native";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,68 +26,70 @@ import {
   View,
 } from "react-native";
 
+import { getSemesters, type Semester } from "../database/semester";
+
 import {
   addSubject,
   deleteSubject,
   getSubjects,
   updateSubject,
   type Subject,
-  type SubjectInput,
 } from "../database/subject";
-
-import {
-  getSemesters,
-  initDatabase,
-  type Semester,
-} from "../database/semester";
 
 const C = {
   navy: "#142D60",
   blue: "#3164D6",
-  background: "#F5F7FC",
+  bg: "#F5F7FC",
   white: "#FFFFFF",
   text: "#17233B",
   muted: "#718096",
   border: "#E6EBF3",
   lightBlue: "#EAF1FF",
+  green: "#218352",
   red: "#DC3545",
 };
 
-type AssessmentType = "Theory" | "Practical";
+type SubjectType = "Theory" | "Practical";
 
 export default function SubjectsScreen() {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [semesters, setSemesters] = useState<Semester[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
 
   const [semesterId, setSemesterId] = useState<number | null>(null);
+
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [credits, setCredits] = useState("3");
-  const [type, setType] = useState<AssessmentType>("Theory");
+  const [credits, setCredits] = useState("");
+  const [type, setType] = useState<SubjectType>("Theory");
 
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
-      await initDatabase();
-
-      const [subjectRows, semesterRows] = await Promise.all([
-        getSubjects(),
+      const [semesterRows, subjectRows] = await Promise.all([
         getSemesters(),
+        getSubjects(),
       ]);
 
-      setSubjects(subjectRows);
       setSemesters(semesterRows);
+      setSubjects(subjectRows);
+
+      setSemesterId((current) => {
+        if (current !== null && semesterRows.some((s) => s.id === current)) {
+          return current;
+        }
+
+        return semesterRows[0]?.id ?? null;
+      });
     } catch (error) {
-      console.error("Subject load error:", error);
-      Alert.alert(
-        "Loading Failed",
-        "Unable to load subjects. Please try again.",
-      );
+      console.error("Subject loading error:", error);
+      Alert.alert("Error", "Unable to load subjects.");
     } finally {
       setLoading(false);
     }
@@ -90,107 +97,136 @@ export default function SubjectsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
+  const selectedSemester = semesters.find(
+    (semester) => semester.id === semesterId,
+  );
+
+  const semesterSubjects = useMemo(() => {
+    return subjects
+      .filter((subject) => subject.semester_id === semesterId)
+      .sort((a, b) => {
+        const codeCompare = a.code.localeCompare(b.code);
+
+        if (codeCompare !== 0) {
+          return codeCompare;
+        }
+
+        return a.type.localeCompare(b.type);
+      });
+  }, [subjects, semesterId]);
+
+  const uniqueCourses = new Set(
+    semesterSubjects.map((subject) => subject.code.trim().toUpperCase()),
+  ).size;
+
+  const theoryCount = semesterSubjects.filter(
+    (subject) => subject.type === "Theory",
+  ).length;
+
+  const practicalCount = semesterSubjects.filter(
+    (subject) => subject.type === "Practical",
+  ).length;
+
   const resetForm = () => {
-    setSemesterId(null);
     setCode("");
     setName("");
-    setCredits("3");
+    setCredits("");
     setType("Theory");
     setEditingId(null);
     setShowForm(false);
     Keyboard.dismiss();
   };
 
-  const openAddForm = () => {
-    if (semesters.length === 0) {
-      Alert.alert(
-        "Semester Required",
-        "Please create a semester before adding subjects.",
-      );
-      return;
-    }
-
+  const selectSemester = (id: number) => {
+    setSemesterId(id);
+    setShowDropdown(false);
     resetForm();
-    setSemesterId(semesters[0].id);
+  };
+
+  const startAdd = () => {
+    setCode("");
+    setName("");
+    setCredits("");
+    setType("Theory");
+    setEditingId(null);
+    setShowDropdown(false);
     setShowForm(true);
   };
 
-  const openEditForm = (subject: Subject) => {
+  const startEdit = (subject: Subject) => {
     setEditingId(subject.id);
-    setSemesterId(subject.semester_id);
     setCode(subject.code);
     setName(subject.name);
     setCredits(String(subject.credits));
     setType(subject.type);
+    setShowDropdown(false);
     setShowForm(true);
+    Keyboard.dismiss();
   };
 
   const saveSubject = async () => {
-    if (saving) return;
+    if (saving || deletingId !== null) {
+      return;
+    }
+
+    if (semesterId === null) {
+      Alert.alert("Select Semester", "Please select a semester first.");
+      return;
+    }
 
     const cleanCode = code.trim().toUpperCase();
     const cleanName = name.trim();
     const creditValue = Number(credits);
 
-    if (!semesterId) {
-      Alert.alert("Semester Required", "Please select a semester.");
+    if (!cleanCode) {
+      Alert.alert("Course Code Required", "Please enter a course code.");
       return;
     }
 
-    if (!cleanCode || !cleanName) {
-      Alert.alert(
-        "Missing Details",
-        "Please enter the subject code and subject name.",
-      );
+    if (!cleanName) {
+      Alert.alert("Course Name Required", "Please enter a course name.");
       return;
     }
 
     if (
-      !credits.trim() ||
+      credits.trim() === "" ||
       !Number.isFinite(creditValue) ||
-      creditValue <= 0 ||
-      creditValue > 30
+      creditValue <= 0
     ) {
-      Alert.alert(
-        "Invalid Credits",
-        "Please enter valid credits greater than 0 and up to 30.",
-      );
+      Alert.alert("Invalid Credits", "Enter valid credits greater than zero.");
       return;
     }
 
-    // Same course code is allowed once for Theory
-    // and once for Practical within a semester.
-    const duplicate = subjects.find(
+    const duplicate = subjects.some(
       (subject) =>
+        subject.id !== editingId &&
         subject.semester_id === semesterId &&
         subject.code.trim().toUpperCase() === cleanCode &&
-        subject.type === type &&
-        subject.id !== editingId,
+        subject.type === type,
     );
 
     if (duplicate) {
       Alert.alert(
         "Duplicate Subject",
-        `${cleanCode} already has a ${type} entry in this semester. ` +
-          "You can create only one Theory and one Practical entry per course code.",
+        `This semester already contains ${cleanCode} (${type}).`,
       );
       return;
     }
 
-    const data: SubjectInput = {
-      semester_id: semesterId,
-      code: cleanCode,
-      name: cleanName,
-      credits: creditValue,
-      type,
-    };
-
     try {
       setSaving(true);
+
+      const data = {
+        semester_id: semesterId,
+        code: cleanCode,
+        name: cleanName,
+        credits: creditValue,
+        type,
+      };
 
       if (editingId !== null) {
         await updateSubject(editingId, data);
@@ -200,22 +236,33 @@ export default function SubjectsScreen() {
 
       resetForm();
       await load();
+
+      Alert.alert(
+        "Success",
+        editingId !== null
+          ? "Subject updated successfully."
+          : "Subject added successfully.",
+      );
     } catch (error) {
       console.error("Subject save error:", error);
 
       Alert.alert(
-        "Unable to Save Subject",
-        "This course code and assessment type may already exist in the selected semester. Only one Theory and one Practical entry are allowed per course code.",
+        "Save Failed",
+        "Unable to save subject. Please check the details.",
       );
     } finally {
       setSaving(false);
     }
   };
 
-  const confirmDelete = (subject: Subject) => {
+  const removeSubject = (subject: Subject) => {
+    if (saving || deletingId !== null) {
+      return;
+    }
+
     Alert.alert(
       "Delete Subject",
-      `Are you sure you want to delete ${subject.name} (${subject.type})? Its saved ICA marks may also be removed.`,
+      `Delete ${subject.code} (${subject.type})? Related saved ICA marks may also be deleted.`,
       [
         {
           text: "Cancel",
@@ -225,14 +272,18 @@ export default function SubjectsScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            if (deletingId !== null) return;
-
             try {
               setDeletingId(subject.id);
               await deleteSubject(subject.id);
+
+              if (editingId === subject.id) {
+                resetForm();
+              }
+
               await load();
             } catch (error) {
               console.error("Subject delete error:", error);
+
               Alert.alert("Delete Failed", "Unable to delete this subject.");
             } finally {
               setDeletingId(null);
@@ -243,695 +294,895 @@ export default function SubjectsScreen() {
     );
   };
 
-  const totalCredits = subjects.reduce(
-    (sum, subject) => sum + subject.credits,
-    0,
-  );
-
-  const uniqueCourseCount = new Set(
-    subjects.map(
-      (subject) => `${subject.semester_id}:${subject.code.toUpperCase()}`,
-    ),
-  ).size;
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={C.blue} />
+        <Text style={styles.loadingText}>Loading subjects...</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* HEADER */}
-        <Text style={styles.eyebrow}>ACADEMIC MANAGEMENT</Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={styles.eyebrow}>ACADEMIC MANAGEMENT</Text>
 
-        <Text style={styles.heading}>My Subjects</Text>
+      <Text style={styles.heading}>Manage Subjects</Text>
 
-        <Text style={styles.subtitle}>
-          Manage your subjects, credits and assessment types.
+      <Text style={styles.subtitle}>
+        Organize your subjects semester by semester.
+      </Text>
+
+      <View style={styles.hero}>
+        <View style={styles.heroTop}>
+          <BookOpen size={28} color="#CFE0FF" />
+          <Text style={styles.heroTag}>OFFLINE STORAGE</Text>
+        </View>
+
+        <Text style={styles.heroLabel}>SUBJECT MANAGER</Text>
+
+        <Text style={styles.heroTitle}>Your Courses</Text>
+
+        <Text style={styles.heroDescription}>
+          Add and manage Theory and Practical subjects in each semester.
         </Text>
+      </View>
 
-        {/* SUMMARY */}
-        <View style={styles.hero}>
-          <View style={styles.heroItem}>
-            <BookOpen size={22} color="#CFE0FF" />
-
-            <Text style={styles.heroValue}>{uniqueCourseCount}</Text>
-
-            <Text style={styles.heroLabel}>Unique Courses</Text>
-          </View>
-
-          <View style={styles.heroDivider} />
-
-          <View style={styles.heroItem}>
-            <Layers3 size={22} color="#CFE0FF" />
-
-            <Text style={styles.heroValue}>{subjects.length}</Text>
-
-            <Text style={styles.heroLabel}>Subject Entries</Text>
-          </View>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionNumber}>
+          <Text style={styles.sectionNumberText}>01</Text>
         </View>
 
-        <View style={styles.creditCard}>
-          <Text style={styles.creditLabel}>Registered Credits</Text>
+        <CalendarDays size={20} color={C.blue} />
 
-          <Text style={styles.creditValue}>{totalCredits}</Text>
+        <Text style={styles.sectionTitle}>Choose Semester</Text>
+      </View>
+
+      {semesters.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <CalendarDays size={35} color="#A7B8D7" />
+
+          <Text style={styles.emptyTitle}>No semesters available</Text>
+
+          <Text style={styles.emptyText}>
+            Create a semester before adding subjects.
+          </Text>
+
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => router.push("/semesters")}
+          >
+            <Plus size={18} color={C.white} />
+
+            <Text style={styles.primaryText}>Add Semester</Text>
+          </Pressable>
         </View>
-
-        {/* ADD SUBJECT */}
-        <Pressable
-          onPress={openAddForm}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Plus size={20} color={C.white} />
-          <Text style={styles.primaryText}>Add New Subject</Text>
-        </Pressable>
-
-        {/* SUBJECT FORM */}
-        {showForm && (
-          <View style={styles.form}>
-            <View style={styles.formHeader}>
-              <Text style={styles.sectionTitle}>
-                {editingId !== null ? "Edit Subject" : "New Subject"}
-              </Text>
-
-              <Pressable onPress={resetForm}>
-                <X size={21} color={C.muted} />
-              </Pressable>
+      ) : (
+        <>
+          <Pressable
+            style={styles.semesterDropdown}
+            onPress={() => setShowDropdown((current) => !current)}
+          >
+            <View style={styles.semesterIcon}>
+              <CalendarDays size={22} color={C.blue} />
             </View>
 
-            <Text style={styles.label}>Select Semester</Text>
+            <View style={styles.semesterInfo}>
+              <Text style={styles.dropdownLabel}>SELECTED SEMESTER</Text>
 
-            {semesters.map((semester) => (
-              <Pressable
-                key={semester.id}
-                onPress={() => setSemesterId(semester.id)}
-                style={[
-                  styles.choice,
-                  semesterId === semester.id && styles.selectedChoice,
-                ]}
-              >
-                <View style={styles.radioOuter}>
-                  {semesterId === semester.id && (
-                    <View style={styles.radioInner} />
-                  )}
-                </View>
+              <Text style={styles.dropdownValue}>
+                {selectedSemester?.name ?? "Choose Semester"}
+              </Text>
 
-                <Text
-                  style={[
-                    styles.choiceText,
-                    semesterId === semester.id && styles.selectedText,
-                  ]}
-                >
-                  {semester.name} ({semester.academic_year})
-                </Text>
-              </Pressable>
-            ))}
+              <Text style={styles.dropdownYear}>
+                {selectedSemester?.academic_year}
+              </Text>
+            </View>
 
-            <Text style={styles.label}>Subject Code</Text>
+            {showDropdown ? (
+              <ChevronUp size={21} color={C.blue} />
+            ) : (
+              <ChevronDown size={21} color={C.blue} />
+            )}
+          </Pressable>
 
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. CSC2201"
-              placeholderTextColor="#9AA7BB"
-              value={code}
-              onChangeText={setCode}
-              autoCapitalize="characters"
-              maxLength={30}
-            />
+          {showDropdown && (
+            <View style={styles.dropdownOptions}>
+              {semesters.map((semester) => {
+                const count = subjects.filter(
+                  (subject) => subject.semester_id === semester.id,
+                ).length;
 
-            <Text style={styles.label}>Subject Name</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Database Systems"
-              placeholderTextColor="#9AA7BB"
-              value={name}
-              onChangeText={setName}
-              maxLength={100}
-            />
-
-            <Text style={styles.label}>Credits</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. 3"
-              placeholderTextColor="#9AA7BB"
-              value={credits}
-              onChangeText={setCredits}
-              keyboardType="decimal-pad"
-            />
-
-            <Text style={styles.label}>Assessment Type</Text>
-
-            <View style={styles.typeRow}>
-              {(["Theory", "Practical"] as const).map((value) => (
-                <Pressable
-                  key={value}
-                  onPress={() => setType(value)}
-                  style={[
-                    styles.typeButton,
-                    type === value && styles.selectedChoice,
-                  ]}
-                >
-                  <Text
+                return (
+                  <Pressable
+                    key={semester.id}
+                    onPress={() => selectSemester(semester.id)}
                     style={[
-                      styles.typeText,
-                      type === value && styles.selectedText,
+                      styles.dropdownOption,
+                      semesterId === semester.id && styles.dropdownOptionActive,
                     ]}
                   >
-                    {value}
-                  </Text>
-                </Pressable>
-              ))}
+                    <View style={styles.optionInfo}>
+                      <Text style={styles.optionName}>{semester.name}</Text>
+
+                      <Text style={styles.optionYear}>
+                        {semester.academic_year}
+                        {"  •  "}
+                        {count} entries
+                      </Text>
+                    </View>
+
+                    {semesterId === semester.id && (
+                      <Check size={19} color={C.blue} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Layers size={21} color={C.blue} />
+              <Text style={styles.statValue}>{uniqueCourses}</Text>
+              <Text style={styles.statLabel}>Unique Courses</Text>
             </View>
 
-            <View style={styles.infoBox}>
-              <Text style={styles.infoText}>
-                {type === "Theory"
-                  ? "Theory: ICA 30% + Final Exam 70%"
-                  : "Practical: ICA 40% + Final Exam 60%"}
-              </Text>
-
-              <Text style={styles.infoSubText}>
-                Same semester and course code can have one Theory and one
-                Practical entry.
-              </Text>
+            <View style={styles.statCard}>
+              <BookOpen size={21} color={C.blue} />
+              <Text style={styles.statValue}>{semesterSubjects.length}</Text>
+              <Text style={styles.statLabel}>Subject Entries</Text>
             </View>
-
-            {/* SAVE BUTTON */}
-            <Pressable
-              disabled={saving}
-              onPress={saveSubject}
-              style={[styles.primaryButton, saving && styles.disabled]}
-            >
-              {saving ? (
-                <ActivityIndicator color={C.white} />
-              ) : (
-                <Check size={19} color={C.white} />
-              )}
-
-              <Text style={styles.primaryText}>
-                {saving
-                  ? "Saving..."
-                  : editingId !== null
-                    ? "Update Subject"
-                    : "Save Subject"}
-              </Text>
-            </Pressable>
           </View>
-        )}
 
-        {/* SUBJECT LIST */}
-        <View style={styles.listHeader}>
-          <Text style={styles.sectionTitle}>Registered Subjects</Text>
+          <View style={styles.typeSummary}>
+            <View style={styles.typeSummaryItem}>
+              <View style={styles.theoryDot} />
+              <Text style={styles.typeSummaryText}>Theory: {theoryCount}</Text>
+            </View>
 
-          <Text style={styles.countText}>{subjects.length} entries</Text>
-        </View>
+            <View style={styles.typeSummaryItem}>
+              <View style={styles.practicalDot} />
+              <Text style={styles.typeSummaryText}>
+                Practical: {practicalCount}
+              </Text>
+            </View>
+          </View>
 
-        {loading ? (
-          <ActivityIndicator size="large" color={C.blue} />
-        ) : subjects.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <BookOpen size={35} color="#A7B8D7" />
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionNumber}>
+              <Text style={styles.sectionNumberText}>02</Text>
+            </View>
 
-            <Text style={styles.emptyTitle}>No subjects yet</Text>
+            <GraduationCap size={21} color={C.blue} />
 
-            <Text style={styles.emptyText}>
-              Add your first subject to start tracking your academic progress.
+            <Text style={styles.sectionTitle}>Semester Subjects</Text>
+          </View>
+
+          {!showForm && (
+            <Pressable style={styles.primaryButton} onPress={startAdd}>
+              <Plus size={19} color={C.white} />
+
+              <Text style={styles.primaryText}>Add Subject</Text>
+            </Pressable>
+          )}
+
+          {showForm && (
+            <View style={styles.formCard}>
+              <View style={styles.formHeader}>
+                <Text style={styles.formTitle}>
+                  {editingId !== null ? "Edit Subject" : "Add New Subject"}
+                </Text>
+
+                <Pressable
+                  onPress={resetForm}
+                  disabled={saving}
+                  style={styles.closeButton}
+                >
+                  <X size={20} color={C.muted} />
+                </Pressable>
+              </View>
+
+              <View style={styles.formSemester}>
+                <CalendarDays size={17} color={C.blue} />
+                <Text style={styles.formSemesterText}>
+                  {selectedSemester?.name}
+                </Text>
+              </View>
+
+              <Text style={styles.label}>Course Code</Text>
+
+              <TextInput
+                style={styles.input}
+                value={code}
+                onChangeText={setCode}
+                placeholder="e.g. CSC2201"
+                placeholderTextColor="#9AA7BB"
+                autoCapitalize="characters"
+                maxLength={30}
+              />
+
+              <Text style={styles.label}>Course Name</Text>
+
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. Database Systems"
+                placeholderTextColor="#9AA7BB"
+                maxLength={120}
+              />
+
+              <Text style={styles.label}>Credits</Text>
+
+              <TextInput
+                style={styles.input}
+                value={credits}
+                onChangeText={setCredits}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 3"
+                placeholderTextColor="#9AA7BB"
+              />
+
+              <Text style={styles.label}>Subject Type</Text>
+
+              <View style={styles.typeRow}>
+                {(["Theory", "Practical"] as SubjectType[]).map((option) => (
+                  <Pressable
+                    key={option}
+                    onPress={() => setType(option)}
+                    style={[
+                      styles.typeButton,
+                      type === option && styles.typeButtonActive,
+                    ]}
+                  >
+                    {type === option && <Check size={16} color={C.white} />}
+
+                    <Text
+                      style={[
+                        styles.typeButtonText,
+                        type === option && styles.typeButtonTextActive,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Pressable
+                style={[styles.saveButton, saving && styles.disabled]}
+                onPress={saveSubject}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color={C.white} />
+                ) : (
+                  <Save size={18} color={C.white} />
+                )}
+
+                <Text style={styles.saveText}>
+                  {saving
+                    ? "Saving..."
+                    : editingId !== null
+                      ? "Update Subject"
+                      : "Save Subject"}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.cancelButton}
+                onPress={resetForm}
+                disabled={saving}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          )}
+
+          <View style={styles.resultsHeader}>
+            <Text style={styles.resultsLabel}>
+              {semesterSubjects.length} subject entries
+            </Text>
+
+            <Text style={styles.resultsHint}>{selectedSemester?.name}</Text>
+          </View>
+
+          {semesterSubjects.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <BookOpen size={35} color="#A7B8D7" />
+
+              <Text style={styles.emptyTitle}>
+                No subjects in this semester
+              </Text>
+
+              <Text style={styles.emptyText}>
+                Add your first subject for the selected semester.
+              </Text>
+            </View>
+          ) : (
+            semesterSubjects.map((subject) => (
+              <View key={subject.id} style={styles.subjectCard}>
+                <View style={styles.subjectTop}>
+                  <View style={styles.subjectIcon}>
+                    <BookOpen size={22} color={C.blue} />
+                  </View>
+
+                  <View style={styles.subjectInfo}>
+                    <Text style={styles.subjectName}>{subject.name}</Text>
+
+                    <Text style={styles.subjectCode}>{subject.code}</Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.typeBadge,
+                      subject.type === "Theory"
+                        ? styles.theoryBadge
+                        : styles.practicalBadge,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.typeBadgeText,
+                        subject.type === "Theory"
+                          ? styles.theoryText
+                          : styles.practicalText,
+                      ]}
+                    >
+                      {subject.type}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.subjectBottom}>
+                  <View style={styles.creditBadge}>
+                    <GraduationCap size={16} color={C.blue} />
+
+                    <Text style={styles.creditText}>
+                      {subject.credits} Credits
+                    </Text>
+                  </View>
+
+                  <View style={styles.actions}>
+                    <Pressable
+                      style={styles.editButton}
+                      onPress={() => startEdit(subject)}
+                      disabled={saving || deletingId !== null}
+                    >
+                      <Pencil size={17} color={C.blue} />
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.deleteButton}
+                      onPress={() => removeSubject(subject)}
+                      disabled={saving || deletingId !== null}
+                    >
+                      {deletingId === subject.id ? (
+                        <ActivityIndicator size="small" color={C.red} />
+                      ) : (
+                        <Trash2 size={17} color={C.red} />
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
+
+          <View style={styles.notice}>
+            <BookOpen size={19} color={C.blue} />
+
+            <Text style={styles.noticeText}>
+              Subjects are organized by semester. The same course code can have
+              one Theory and one Practical entry, but duplicate entries of the
+              same type are not allowed.
             </Text>
           </View>
-        ) : (
-          subjects.map((subject) => (
-            <View key={subject.id} style={styles.subjectCard}>
-              <View style={styles.subjectHeader}>
-                <View style={styles.subjectIcon}>
-                  <BookOpen size={23} color={C.blue} />
-                </View>
-
-                <View style={styles.subjectInfo}>
-                  <Text style={styles.subjectName}>{subject.name}</Text>
-
-                  <Text style={styles.subjectCode}>{subject.code}</Text>
-
-                  <Text style={styles.semesterName}>
-                    {subject.semester_name}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.typeBadge,
-                    subject.type === "Practical" && styles.practicalBadge,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.typeBadgeText,
-                      subject.type === "Practical" && styles.practicalText,
-                    ]}
-                  >
-                    {subject.type}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.subjectMeta}>
-                <Text style={styles.metaText}>{subject.credits} Credits</Text>
-
-                <Text style={styles.metaText}>
-                  {subject.type === "Theory" ? "ICA 30%" : "ICA 40%"}
-                </Text>
-              </View>
-
-              {/* EDIT / DELETE */}
-              <View style={styles.actionRow}>
-                <Pressable
-                  onPress={() => openEditForm(subject)}
-                  style={({ pressed }) => [
-                    styles.editButton,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Pencil size={16} color={C.blue} />
-
-                  <Text style={styles.editText}>Edit</Text>
-                </Pressable>
-
-                <Pressable
-                  disabled={deletingId !== null}
-                  onPress={() => confirmDelete(subject)}
-                  style={({ pressed }) => [
-                    styles.deleteButton,
-                    pressed && styles.pressed,
-                    deletingId !== null && styles.disabled,
-                  ]}
-                >
-                  <Trash2 size={16} color={C.red} />
-
-                  <Text style={styles.deleteText}>Delete</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))
-        )}
-      </ScrollView>
-    </View>
+        </>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.background,
+    backgroundColor: C.bg,
   },
-
   content: {
     padding: 20,
     paddingBottom: 60,
   },
-
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: C.bg,
+  },
+  loadingText: {
+    color: C.muted,
+    fontSize: 13,
+    marginTop: 14,
+  },
   eyebrow: {
-    fontSize: 11,
     color: C.blue,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "800",
     letterSpacing: 1.3,
     marginBottom: 7,
   },
-
   heading: {
-    fontSize: 29,
-    fontWeight: "800",
     color: C.text,
+    fontSize: 28,
+    fontWeight: "800",
   },
-
   subtitle: {
-    fontSize: 13,
     color: C.muted,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 7,
     marginBottom: 22,
+    lineHeight: 20,
   },
-
   hero: {
     backgroundColor: C.navy,
-    borderRadius: 22,
+    borderRadius: 23,
     padding: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 27,
   },
-
-  heroItem: {
-    flex: 1,
-    alignItems: "center",
-    gap: 7,
-  },
-
-  heroValue: {
-    fontSize: 29,
-    fontWeight: "800",
-    color: C.white,
-  },
-
-  heroLabel: {
-    fontSize: 11,
-    color: "#CFE0FF",
-    textAlign: "center",
-  },
-
-  heroDivider: {
-    width: 1,
-    height: 65,
-    backgroundColor: "#426098",
-    marginHorizontal: 14,
-  },
-
-  creditCard: {
-    backgroundColor: C.white,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 15,
-    padding: 17,
+  heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 19,
   },
-
-  creditLabel: {
-    fontSize: 13,
-    color: C.muted,
-    fontWeight: "600",
-  },
-
-  creditValue: {
-    fontSize: 23,
-    color: C.navy,
+  heroTag: {
+    color: "#CFE0FF",
+    backgroundColor: "#2E4B83",
+    fontSize: 10,
     fontWeight: "800",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
   },
-
-  primaryButton: {
-    backgroundColor: C.blue,
-    borderRadius: 15,
-    padding: 16,
+  heroLabel: {
+    color: "#CFE0FF",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  heroTitle: {
+    color: C.white,
+    fontSize: 26,
+    fontWeight: "800",
+    marginTop: 8,
+  },
+  heroDescription: {
+    color: "#D5E0FA",
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 10,
+  },
+  sectionHeader: {
     flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginBottom: 15,
+  },
+  sectionNumber: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "#DFEAFD",
     alignItems: "center",
     justifyContent: "center",
-    gap: 9,
-    marginBottom: 20,
   },
-
-  primaryText: {
-    color: C.white,
-    fontWeight: "700",
-    fontSize: 15,
+  sectionNumberText: {
+    color: C.blue,
+    fontSize: 11,
+    fontWeight: "800",
   },
-
-  form: {
-    backgroundColor: C.white,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 24,
-  },
-
-  formHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 18,
-  },
-
   sectionTitle: {
+    color: C.text,
     fontSize: 18,
     fontWeight: "800",
-    color: C.text,
-  },
-
-  label: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: C.text,
-    marginBottom: 9,
-  },
-
-  input: {
-    height: 49,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
-    paddingHorizontal: 13,
-    marginBottom: 17,
-    color: C.text,
-    fontSize: 14,
-  },
-
-  choice: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 11,
-    padding: 12,
-    marginBottom: 9,
-  },
-
-  selectedChoice: {
-    backgroundColor: C.lightBlue,
-    borderColor: C.blue,
-  },
-
-  choiceText: {
-    fontSize: 12,
-    color: C.text,
     flex: 1,
   },
-
-  selectedText: {
-    color: C.blue,
+  semesterDropdown: {
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: "#BBD0F6",
+    borderRadius: 17,
+    padding: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    marginBottom: 12,
+  },
+  semesterIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: C.lightBlue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  semesterInfo: {
+    flex: 1,
+  },
+  dropdownLabel: {
+    color: C.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    marginBottom: 5,
+  },
+  dropdownValue: {
+    color: C.navy,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  dropdownYear: {
+    color: C.muted,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  dropdownOptions: {
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    padding: 8,
+    marginBottom: 16,
+  },
+  dropdownOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+  },
+  dropdownOptionActive: {
+    backgroundColor: C.lightBlue,
+  },
+  optionInfo: {
+    flex: 1,
+  },
+  optionName: {
+    color: C.text,
+    fontSize: 13,
     fontWeight: "700",
   },
-
-  radioOuter: {
-    width: 17,
-    height: 17,
-    borderWidth: 2,
-    borderColor: C.blue,
-    borderRadius: 9,
-    marginRight: 10,
-    justifyContent: "center",
-    alignItems: "center",
+  optionYear: {
+    color: C.muted,
+    fontSize: 11,
+    marginTop: 5,
   },
-
-  radioInner: {
-    width: 8,
-    height: 8,
+  statsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 17,
+    padding: 17,
+    gap: 9,
+  },
+  statValue: {
+    color: C.navy,
+    fontSize: 27,
+    fontWeight: "800",
+  },
+  statLabel: {
+    color: C.muted,
+    fontSize: 11,
+  },
+  typeSummary: {
+    backgroundColor: C.lightBlue,
+    borderRadius: 13,
+    padding: 15,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 28,
+  },
+  typeSummaryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  typeSummaryText: {
+    color: C.navy,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  theoryDot: {
+    width: 9,
+    height: 9,
     borderRadius: 5,
     backgroundColor: C.blue,
   },
-
+  practicalDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: C.green,
+  },
+  primaryButton: {
+    backgroundColor: C.blue,
+    borderRadius: 13,
+    padding: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 9,
+    marginBottom: 17,
+  },
+  primaryText: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  formCard: {
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: "#BBD0F6",
+    borderRadius: 19,
+    padding: 18,
+    marginBottom: 20,
+  },
+  formHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 15,
+  },
+  formTitle: {
+    color: C.text,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  closeButton: {
+    padding: 7,
+  },
+  formSemester: {
+    backgroundColor: C.lightBlue,
+    padding: 12,
+    borderRadius: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginBottom: 20,
+  },
+  formSemesterText: {
+    color: C.navy,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  label: {
+    color: C.text,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 9,
+  },
+  input: {
+    height: 51,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    color: C.text,
+    fontSize: 15,
+    marginBottom: 19,
+  },
   typeRow: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 13,
+    gap: 11,
+    marginBottom: 23,
   },
-
   typeButton: {
     flex: 1,
     borderWidth: 1,
     borderColor: C.border,
     borderRadius: 12,
     padding: 14,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
   },
-
-  typeText: {
+  typeButtonActive: {
+    backgroundColor: C.blue,
+    borderColor: C.blue,
+  },
+  typeButtonText: {
+    color: C.muted,
     fontSize: 13,
-    color: C.text,
-  },
-
-  infoBox: {
-    backgroundColor: "#F0F5FF",
-    padding: 13,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-
-  infoText: {
-    fontSize: 12,
-    color: C.navy,
     fontWeight: "700",
   },
-
-  infoSubText: {
-    fontSize: 11,
-    color: C.muted,
-    marginTop: 7,
-    lineHeight: 17,
+  typeButtonTextActive: {
+    color: C.white,
   },
-
-  listHeader: {
+  saveButton: {
+    backgroundColor: C.blue,
+    borderRadius: 12,
+    padding: 15,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 9,
+  },
+  saveText: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  cancelButton: {
+    padding: 15,
+    alignItems: "center",
+  },
+  cancelText: {
+    color: C.muted,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  resultsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14,
-  },
-
-  countText: {
-    color: C.muted,
-    fontSize: 12,
-  },
-
-  emptyCard: {
-    backgroundColor: C.white,
-    borderRadius: 18,
-    padding: 30,
-    alignItems: "center",
+    marginBottom: 15,
     gap: 10,
   },
-
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: "700",
+  resultsLabel: {
     color: C.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
-
-  emptyText: {
+  resultsHint: {
     color: C.muted,
-    fontSize: 12,
-    textAlign: "center",
-    lineHeight: 19,
+    fontSize: 11,
+    flexShrink: 1,
+    textAlign: "right",
   },
-
   subjectCard: {
     backgroundColor: C.white,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: 18,
+    borderRadius: 17,
     padding: 16,
-    marginBottom: 13,
+    marginBottom: 12,
   },
-
-  subjectHeader: {
+  subjectTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 11,
+    marginBottom: 16,
   },
-
   subjectIcon: {
     width: 45,
     height: 45,
     borderRadius: 13,
     backgroundColor: C.lightBlue,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
   },
-
   subjectInfo: {
     flex: 1,
   },
-
   subjectName: {
+    color: C.text,
     fontSize: 14,
     fontWeight: "800",
-    color: C.text,
   },
-
   subjectCode: {
-    fontSize: 12,
     color: C.blue,
-    marginTop: 5,
+    fontSize: 12,
     fontWeight: "700",
+    marginTop: 5,
   },
-
-  semesterName: {
-    fontSize: 11,
-    color: C.muted,
-    marginTop: 4,
-  },
-
   typeBadge: {
-    backgroundColor: C.lightBlue,
     borderRadius: 9,
     paddingHorizontal: 9,
     paddingVertical: 7,
   },
-
+  theoryBadge: {
+    backgroundColor: C.lightBlue,
+  },
   practicalBadge: {
     backgroundColor: "#E7F7EE",
   },
-
   typeBadgeText: {
     fontSize: 10,
-    color: C.blue,
-    fontWeight: "700",
+    fontWeight: "800",
   },
-
+  theoryText: {
+    color: C.blue,
+  },
   practicalText: {
-    color: "#218352",
+    color: C.green,
   },
-
-  subjectMeta: {
+  subjectBottom: {
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 13,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F7F9FD",
-    padding: 12,
-    borderRadius: 11,
-    marginTop: 15,
   },
-
-  metaText: {
-    fontSize: 12,
+  creditBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  creditText: {
     color: C.navy,
+    fontSize: 12,
     fontWeight: "700",
   },
-
-  actionRow: {
+  actions: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 14,
+    gap: 9,
   },
-
   editButton: {
-    flex: 1,
-    backgroundColor: "#EEF3FF",
+    width: 38,
+    height: 38,
     borderRadius: 11,
-    padding: 12,
-    flexDirection: "row",
+    backgroundColor: C.lightBlue,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
   },
-
-  editText: {
-    color: C.blue,
-    fontWeight: "700",
-  },
-
   deleteButton: {
-    flex: 1,
-    backgroundColor: "#FFF0F1",
+    width: 38,
+    height: 38,
     borderRadius: 11,
-    padding: 12,
-    flexDirection: "row",
+    backgroundColor: "#FFF0F1",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
   },
-
-  deleteText: {
-    color: C.red,
-    fontWeight: "700",
+  emptyCard: {
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 17,
+    padding: 26,
+    alignItems: "center",
+    gap: 11,
+    marginBottom: 15,
   },
-
+  emptyTitle: {
+    color: C.text,
+    fontSize: 16,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  emptyText: {
+    color: C.muted,
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: "center",
+  },
+  notice: {
+    backgroundColor: C.lightBlue,
+    borderRadius: 15,
+    padding: 16,
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 11,
+  },
+  noticeText: {
+    flex: 1,
+    color: "#607394",
+    fontSize: 12,
+    lineHeight: 19,
+  },
   disabled: {
     opacity: 0.6,
-  },
-
-  pressed: {
-    opacity: 0.75,
   },
 });

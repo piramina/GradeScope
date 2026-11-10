@@ -222,6 +222,8 @@ export default function Dashboard() {
                   router.push("/ica");
                 } else if (action.title === "Final Exam Predictor") {
                   router.push("/predictor");
+                } else if (action.title === "GPA & CGPA") {
+                  router.push("/gpa");
                 } else {
                   comingSoon(action.title);
                 }

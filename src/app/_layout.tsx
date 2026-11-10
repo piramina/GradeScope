@@ -142,7 +142,6 @@ export default function RootLayout() {
           animation: "slide_from_right",
         }}
       >
-        {/* DASHBOARD */}
         <Stack.Screen
           name="index"
           options={{
@@ -150,7 +149,6 @@ export default function RootLayout() {
           }}
         />
 
-        {/* SEMESTER MANAGER */}
         <Stack.Screen
           name="semesters"
           options={{
@@ -159,7 +157,6 @@ export default function RootLayout() {
           }}
         />
 
-        {/* SUBJECT MANAGER */}
         <Stack.Screen
           name="subjects"
           options={{
@@ -168,7 +165,6 @@ export default function RootLayout() {
           }}
         />
 
-        {/* ICA CALCULATOR */}
         <Stack.Screen
           name="ica"
           options={{
@@ -177,7 +173,6 @@ export default function RootLayout() {
           }}
         />
 
-        {/* FINAL EXAM PREDICTOR */}
         <Stack.Screen
           name="predictor"
           options={{
@@ -186,11 +181,18 @@ export default function RootLayout() {
           }}
         />
 
-        {/* EXISTING EXPLORE SCREEN */}
         <Stack.Screen
           name="explore"
           options={{
             title: "Explore",
+            headerShown: true,
+          }}
+        />
+
+        <Stack.Screen
+          name="gpa"
+          options={{
+            title: "GPA & CGPA",
             headerShown: true,
           }}
         />
