@@ -1,15 +1,4 @@
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-
-import { router } from "expo-router";
-
+import { router, useFocusEffect } from "expo-router";
 import {
   ArrowUpRight,
   BookOpen,
@@ -18,10 +7,29 @@ import {
   ChevronRight,
   Clock3,
   GraduationCap,
+  RefreshCw,
   Sparkles,
   Target,
   TrendingUp,
 } from "lucide-react-native";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
+import { getSemesters, type Semester } from "../database/semester";
+
+import { getSubjects, type Subject } from "../database/subject";
+
+import { calculateGPA, getGPARecords, type GPARecord } from "../database/gpa";
 
 const C = {
   navy: "#142D60",
@@ -31,9 +39,102 @@ const C = {
   text: "#17233B",
   muted: "#718096",
   border: "#E6EBF3",
+  green: "#218352",
+};
+
+type DashboardData = {
+  cgpa: number | null;
+  latestGPA: number | null;
+  credits: number;
+  semesterCount: number;
+  subjectCount: number;
+  recordedCourses: number;
+  totalCourses: number;
+};
+
+const initialData: DashboardData = {
+  cgpa: null,
+  latestGPA: null,
+  credits: 0,
+  semesterCount: 0,
+  subjectCount: 0,
+  recordedCourses: 0,
+  totalCourses: 0,
 };
 
 export default function Dashboard() {
+  const [data, setData] = useState<DashboardData>(initialData);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      setError("");
+
+      const [semesters, subjects, records]: [
+        Semester[],
+        Subject[],
+        GPARecord[],
+      ] = await Promise.all([getSemesters(), getSubjects(), getGPARecords()]);
+
+      const overall = calculateGPA(records);
+
+      const courseKeys = new Set(
+        subjects.map(
+          (subject) =>
+            `${subject.semester_id}:${subject.code.trim().toUpperCase()}`,
+        ),
+      );
+
+      const recordedKeys = new Set(
+        records.map(
+          (record) =>
+            `${record.semester_id}:${record.course_code.trim().toUpperCase()}`,
+        ),
+      );
+
+      const recordedCourses = [...recordedKeys].filter((key) =>
+        courseKeys.has(key),
+      ).length;
+
+      const latestSemester = [...semesters].sort((a, b) => b.id - a.id)[0];
+
+      const latestRecords = latestSemester
+        ? records.filter((record) => record.semester_id === latestSemester.id)
+        : [];
+
+      const latest = calculateGPA(latestRecords);
+
+      setData({
+        cgpa: overall.gpa,
+        latestGPA: latest.gpa,
+        credits: overall.credits,
+        semesterCount: semesters.length,
+        subjectCount: courseKeys.size,
+        recordedCourses,
+        totalCourses: courseKeys.size,
+      });
+    } catch (err) {
+      console.error("Dashboard load error:", err);
+      setError("Unable to load academic information.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadDashboard();
+    }, [loadDashboard]),
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    void loadDashboard();
+  };
+
   const comingSoon = (title: string) => {
     Alert.alert(
       "Coming Soon",
@@ -47,26 +148,44 @@ export default function Dashboard() {
       subtitle: "Calculate your best 2 ICA marks",
       icon: Calculator,
       background: "#EAF1FF",
+      route: "/ica" as const,
     },
     {
       title: "Final Exam Predictor",
       subtitle: "Calculate required final exam marks",
       icon: Target,
       background: "#F3ECFF",
+      route: "/predictor" as const,
     },
     {
       title: "GPA & CGPA",
       subtitle: "Calculate your academic GPA",
       icon: GraduationCap,
       background: "#E8F8F1",
+      route: "/gpa" as const,
     },
     {
       title: "Performance Analysis",
       subtitle: "Explore academic progress",
       icon: TrendingUp,
       background: "#FFF4E5",
+      route: null,
     },
   ];
+
+  const progress =
+    data.totalCourses > 0
+      ? Math.round((data.recordedCourses / data.totalCourses) * 100)
+      : 0;
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={C.blue} />
+        <Text style={styles.loadingText}>Loading GradeScope...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -75,8 +194,14 @@ export default function Dashboard() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[C.blue]}
+          />
+        }
       >
-        {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={styles.greeting}>Welcome back 👋</Text>
@@ -93,45 +218,58 @@ export default function Dashboard() {
           </View>
         </View>
 
-        {/* CGPA CARD */}
+        {error !== "" && (
+          <Pressable
+            style={styles.errorCard}
+            onPress={() => void loadDashboard()}
+          >
+            <RefreshCw size={18} color="#C43C3C" />
+            <Text style={styles.errorText}>{error} Tap to retry.</Text>
+          </Pressable>
+        )}
+
         <View style={styles.hero}>
           <View style={styles.heroTop}>
             <View>
               <Text style={styles.heroLabel}>OVERALL CGPA</Text>
 
               <Text style={styles.heroValue}>
-                3.34
+                {data.cgpa === null ? "—" : data.cgpa.toFixed(2)}
+
                 <Text style={styles.heroMax}> / 4.00</Text>
               </Text>
             </View>
 
             <View style={styles.heroBadge}>
-              <Sparkles size={17} color="#FFFFFF" />
+              <Sparkles size={17} color={C.white} />
             </View>
           </View>
 
           <Text style={styles.heroDescription}>
-            Track your progress and achieve your academic goals.
+            {data.recordedCourses === 0
+              ? "Add your course results to see your CGPA."
+              : "Calculated from your saved academic results."}
           </Text>
 
           <View style={styles.heroDivider} />
 
           <View style={styles.heroBottom}>
-            <View>
-              <Text style={styles.heroSmallLabel}>Latest Semester GPA</Text>
+            <View style={styles.heroMetric}>
+              <Text style={styles.heroSmallLabel}>Last Added Semester GPA</Text>
 
-              <Text style={styles.heroSmallValue}>3.48</Text>
+              <Text style={styles.heroSmallValue}>
+                {data.latestGPA === null ? "—" : data.latestGPA.toFixed(2)}
+              </Text>
             </View>
 
-            <View>
-              <Text style={styles.heroSmallLabel}>Completed Credits</Text>
+            <View style={styles.heroMetric}>
+              <Text style={styles.heroSmallLabel}>Recorded Credits</Text>
 
-              <Text style={styles.heroSmallValue}>22</Text>
+              <Text style={styles.heroSmallValue}>{data.credits}</Text>
             </View>
           </View>
         </View>
 
-        {/* ACADEMIC OVERVIEW */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Academic Overview</Text>
 
@@ -139,28 +277,53 @@ export default function Dashboard() {
         </View>
 
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
+          <Pressable
+            style={styles.statCard}
+            onPress={() => router.push("/semesters")}
+          >
             <View style={styles.statIcon}>
               <CalendarDays size={22} color={C.blue} />
             </View>
 
-            <Text style={styles.statValue}>2</Text>
+            <Text style={styles.statValue}>{data.semesterCount}</Text>
 
             <Text style={styles.statLabel}>Semesters</Text>
-          </View>
+          </Pressable>
 
-          <View style={styles.statCard}>
+          <Pressable
+            style={styles.statCard}
+            onPress={() => router.push("/subjects")}
+          >
             <View style={styles.statIcon}>
               <BookOpen size={22} color={C.blue} />
             </View>
 
-            <Text style={styles.statValue}>4</Text>
+            <Text style={styles.statValue}>{data.subjectCount}</Text>
 
-            <Text style={styles.statLabel}>Subjects</Text>
+            <Text style={styles.statLabel}>Unique Courses</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.progressCard}>
+          <View style={styles.progressHeader}>
+            <View>
+              <Text style={styles.progressTitle}>
+                Academic Results Progress
+              </Text>
+
+              <Text style={styles.progressSubtitle}>
+                {data.recordedCourses} of {data.totalCourses} courses recorded
+              </Text>
+            </View>
+
+            <Text style={styles.progressPercent}>{progress}%</Text>
+          </View>
+
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progress}%` }]} />
           </View>
         </View>
 
-        {/* MANAGE SEMESTERS BUTTON */}
         <Pressable
           onPress={() => router.push("/semesters")}
           style={({ pressed }) => [
@@ -183,7 +346,6 @@ export default function Dashboard() {
           <ChevronRight size={21} color={C.blue} />
         </Pressable>
 
-        {/* MANAGE SUBJECTS BUTTON */}
         <Pressable
           onPress={() => router.push("/subjects")}
           style={({ pressed }) => [
@@ -206,7 +368,6 @@ export default function Dashboard() {
           <ChevronRight size={21} color={C.blue} />
         </Pressable>
 
-        {/* QUICK ACTIONS */}
         <View style={styles.quickHeader}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
         </View>
@@ -218,12 +379,8 @@ export default function Dashboard() {
             <Pressable
               key={action.title}
               onPress={() => {
-                if (action.title === "ICA Calculator") {
-                  router.push("/ica");
-                } else if (action.title === "Final Exam Predictor") {
-                  router.push("/predictor");
-                } else if (action.title === "GPA & CGPA") {
-                  router.push("/gpa");
+                if (action.route) {
+                  router.push(action.route);
                 } else {
                   comingSoon(action.title);
                 }
@@ -253,17 +410,18 @@ export default function Dashboard() {
           );
         })}
 
-        {/* DEVELOPMENT STATUS */}
         <View style={styles.noteCard}>
           <View style={styles.noteIcon}>
             <Clock3 size={20} color={C.blue} />
           </View>
 
-          <View style={{ flex: 1 }}>
-            <Text style={styles.noteTitle}>Your academic assistant</Text>
+          <View style={styles.noteText}>
+            <Text style={styles.noteTitle}>
+              Your offline academic assistant
+            </Text>
 
             <Text style={styles.noteDescription}>
-              New academic tools are being added.
+              Academic records are saved locally on your device.
             </Text>
           </View>
         </View>
@@ -279,42 +437,46 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.background,
   },
-
+  center: {
+    flex: 1,
+    backgroundColor: C.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: C.muted,
+    fontSize: 13,
+    marginTop: 13,
+  },
   content: {
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 50,
   },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 25,
   },
-
   headerText: {
     flex: 1,
   },
-
   greeting: {
     fontSize: 14,
     color: C.muted,
     marginBottom: 5,
   },
-
   heading: {
     fontSize: 29,
     fontWeight: "800",
     color: C.text,
   },
-
   subheading: {
     fontSize: 13,
     color: C.muted,
     marginTop: 5,
   },
-
   headerIcon: {
     width: 55,
     height: 55,
@@ -324,39 +486,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 10,
   },
-
+  errorCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF0F1",
+    borderRadius: 12,
+    padding: 13,
+    gap: 10,
+    marginBottom: 15,
+  },
+  errorText: {
+    color: "#C43C3C",
+    flex: 1,
+    fontSize: 12,
+  },
   hero: {
     backgroundColor: C.navy,
     borderRadius: 25,
     padding: 24,
     marginBottom: 27,
   },
-
   heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
-
   heroLabel: {
     color: "#BDD1FF",
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 1.3,
   },
-
   heroValue: {
     color: C.white,
     fontSize: 43,
     fontWeight: "800",
     marginTop: 8,
   },
-
   heroMax: {
     color: "#C7D8FF",
     fontSize: 17,
     fontWeight: "500",
   },
-
   heroBadge: {
     width: 35,
     height: 35,
@@ -365,56 +535,51 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   heroDescription: {
     color: "#D5E0FA",
     fontSize: 12,
     marginTop: 10,
     lineHeight: 19,
   },
-
   heroDivider: {
     height: 1,
     backgroundColor: "#426098",
     marginVertical: 22,
   },
-
   heroBottom: {
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 15,
   },
-
+  heroMetric: {
+    flex: 1,
+  },
   heroSmallLabel: {
     color: "#BDD1FF",
     fontSize: 11,
     marginBottom: 7,
   },
-
   heroSmallValue: {
     color: C.white,
     fontSize: 22,
     fontWeight: "700",
   },
-
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 15,
   },
-
   sectionTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: C.text,
   },
-
   statsRow: {
     flexDirection: "row",
     gap: 12,
     marginBottom: 19,
   },
-
   statCard: {
     flex: 1,
     backgroundColor: C.white,
@@ -423,7 +588,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-
   statIcon: {
     width: 42,
     height: 42,
@@ -433,19 +597,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
-
   statValue: {
     fontSize: 27,
     fontWeight: "800",
     color: C.text,
   },
-
   statLabel: {
     color: C.muted,
     fontSize: 12,
     marginTop: 5,
   },
-
+  progressCard: {
+    backgroundColor: C.white,
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 20,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  progressTitle: {
+    color: C.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  progressSubtitle: {
+    color: C.muted,
+    fontSize: 11,
+    marginTop: 6,
+  },
+  progressPercent: {
+    color: C.blue,
+    fontSize: 19,
+    fontWeight: "800",
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 6,
+    backgroundColor: "#E7EDF7",
+    overflow: "hidden",
+    marginTop: 15,
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: C.blue,
+    borderRadius: 6,
+  },
   manageCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -456,7 +657,6 @@ const styles = StyleSheet.create({
     borderColor: "#D8E3F7",
     marginBottom: 13,
   },
-
   manageIcon: {
     width: 51,
     height: 51,
@@ -465,29 +665,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   manageText: {
     flex: 1,
     marginLeft: 13,
   },
-
   manageTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: C.text,
   },
-
   manageSubtitle: {
     fontSize: 11,
     color: C.muted,
     marginTop: 5,
   },
-
   quickHeader: {
     marginTop: 18,
     marginBottom: 15,
   },
-
   actionCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -498,7 +693,6 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     marginBottom: 12,
   },
-
   actionIcon: {
     width: 51,
     height: 51,
@@ -506,24 +700,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   actionText: {
     flex: 1,
     marginLeft: 14,
   },
-
   actionTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: C.text,
   },
-
   actionSubtitle: {
     fontSize: 11,
     color: C.muted,
     marginTop: 5,
   },
-
   noteCard: {
     backgroundColor: "#EAF1FF",
     padding: 16,
@@ -532,7 +722,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 15,
   },
-
   noteIcon: {
     width: 39,
     height: 39,
@@ -542,26 +731,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
-
+  noteText: {
+    flex: 1,
+  },
   noteTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: C.navy,
   },
-
   noteDescription: {
     fontSize: 11,
     color: "#59709B",
     marginTop: 4,
+    lineHeight: 17,
   },
-
   footer: {
     textAlign: "center",
     marginTop: 29,
     color: C.muted,
     fontSize: 12,
   },
-
   pressed: {
     opacity: 0.7,
   },
