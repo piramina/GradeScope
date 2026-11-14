@@ -1,3 +1,4 @@
+
 import { router, useFocusEffect } from "expo-router";
 import {
   BookOpen,
@@ -9,6 +10,7 @@ import {
   Layers,
   Pencil,
   Plus,
+  Search,
   Save,
   Trash2,
   X,
@@ -27,7 +29,6 @@ import {
 } from "react-native";
 
 import { getSemesters, type Semester } from "../database/semester";
-
 import {
   addSubject,
   deleteSubject,
@@ -50,11 +51,11 @@ const C = {
 };
 
 type SubjectType = "Theory" | "Practical";
+type SubjectFilter = "All" | "Theory" | "Practical";
 
 export default function SubjectsScreen() {
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-
   const [semesterId, setSemesterId] = useState<number | null>(null);
 
   const [showDropdown, setShowDropdown] = useState(false);
@@ -65,6 +66,9 @@ export default function SubjectsScreen() {
   const [name, setName] = useState("");
   const [credits, setCredits] = useState("");
   const [type, setType] = useState<SubjectType>("Theory");
+
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<SubjectFilter>("All");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -81,7 +85,10 @@ export default function SubjectsScreen() {
       setSubjects(subjectRows);
 
       setSemesterId((current) => {
-        if (current !== null && semesterRows.some((s) => s.id === current)) {
+        if (
+          current !== null &&
+          semesterRows.some((semester) => semester.id === current)
+        ) {
           return current;
         }
 
@@ -119,8 +126,26 @@ export default function SubjectsScreen() {
       });
   }, [subjects, semesterId]);
 
+  const filteredSubjects = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return semesterSubjects.filter((subject) => {
+      const matchesSearch =
+        query.length === 0 ||
+        subject.code.toLowerCase().includes(query) ||
+        subject.name.toLowerCase().includes(query);
+
+      const matchesType =
+        filter === "All" || subject.type === filter;
+
+      return matchesSearch && matchesType;
+    });
+  }, [semesterSubjects, search, filter]);
+
   const uniqueCourses = new Set(
-    semesterSubjects.map((subject) => subject.code.trim().toUpperCase()),
+    semesterSubjects.map((subject) =>
+      subject.code.trim().toUpperCase(),
+    ),
   ).size;
 
   const theoryCount = semesterSubjects.filter(
@@ -130,6 +155,14 @@ export default function SubjectsScreen() {
   const practicalCount = semesterSubjects.filter(
     (subject) => subject.type === "Practical",
   ).length;
+
+  const hasActiveFilters = search.trim() !== "" || filter !== "All";
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilter("All");
+    Keyboard.dismiss();
+  };
 
   const resetForm = () => {
     setCode("");
@@ -144,6 +177,7 @@ export default function SubjectsScreen() {
   const selectSemester = (id: number) => {
     setSemesterId(id);
     setShowDropdown(false);
+    clearFilters();
     resetForm();
   };
 
@@ -155,6 +189,7 @@ export default function SubjectsScreen() {
     setEditingId(null);
     setShowDropdown(false);
     setShowForm(true);
+    Keyboard.dismiss();
   };
 
   const startEdit = (subject: Subject) => {
@@ -197,7 +232,10 @@ export default function SubjectsScreen() {
       !Number.isFinite(creditValue) ||
       creditValue <= 0
     ) {
-      Alert.alert("Invalid Credits", "Enter valid credits greater than zero.");
+      Alert.alert(
+        "Invalid Credits",
+        "Enter valid credits greater than zero.",
+      );
       return;
     }
 
@@ -216,6 +254,8 @@ export default function SubjectsScreen() {
       );
       return;
     }
+
+    const wasEditing = editingId !== null;
 
     try {
       setSaving(true);
@@ -239,13 +279,12 @@ export default function SubjectsScreen() {
 
       Alert.alert(
         "Success",
-        editingId !== null
+        wasEditing
           ? "Subject updated successfully."
           : "Subject added successfully.",
       );
     } catch (error) {
       console.error("Subject save error:", error);
-
       Alert.alert(
         "Save Failed",
         "Unable to save subject. Please check the details.",
@@ -283,8 +322,10 @@ export default function SubjectsScreen() {
               await load();
             } catch (error) {
               console.error("Subject delete error:", error);
-
-              Alert.alert("Delete Failed", "Unable to delete this subject.");
+              Alert.alert(
+                "Delete Failed",
+                "Unable to delete this subject.",
+              );
             } finally {
               setDeletingId(null);
             }
@@ -298,7 +339,9 @@ export default function SubjectsScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={C.blue} />
-        <Text style={styles.loadingText}>Loading subjects...</Text>
+        <Text style={styles.loadingText}>
+          Loading subjects...
+        </Text>
       </View>
     );
   }
@@ -310,23 +353,33 @@ export default function SubjectsScreen() {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.eyebrow}>ACADEMIC MANAGEMENT</Text>
+      <Text style={styles.eyebrow}>
+        ACADEMIC MANAGEMENT
+      </Text>
 
-      <Text style={styles.heading}>Manage Subjects</Text>
+      <Text style={styles.heading}>
+        Manage Subjects
+      </Text>
 
       <Text style={styles.subtitle}>
-        Organize your subjects semester by semester.
+        Organize, search and filter your subjects semester by semester.
       </Text>
 
       <View style={styles.hero}>
         <View style={styles.heroTop}>
           <BookOpen size={28} color="#CFE0FF" />
-          <Text style={styles.heroTag}>OFFLINE STORAGE</Text>
+          <Text style={styles.heroTag}>
+            OFFLINE STORAGE
+          </Text>
         </View>
 
-        <Text style={styles.heroLabel}>SUBJECT MANAGER</Text>
+        <Text style={styles.heroLabel}>
+          SUBJECT MANAGER
+        </Text>
 
-        <Text style={styles.heroTitle}>Your Courses</Text>
+        <Text style={styles.heroTitle}>
+          Your Courses
+        </Text>
 
         <Text style={styles.heroDescription}>
           Add and manage Theory and Practical subjects in each semester.
@@ -340,14 +393,18 @@ export default function SubjectsScreen() {
 
         <CalendarDays size={20} color={C.blue} />
 
-        <Text style={styles.sectionTitle}>Choose Semester</Text>
+        <Text style={styles.sectionTitle}>
+          Choose Semester
+        </Text>
       </View>
 
       {semesters.length === 0 ? (
         <View style={styles.emptyCard}>
           <CalendarDays size={35} color="#A7B8D7" />
 
-          <Text style={styles.emptyTitle}>No semesters available</Text>
+          <Text style={styles.emptyTitle}>
+            No semesters available
+          </Text>
 
           <Text style={styles.emptyText}>
             Create a semester before adding subjects.
@@ -358,22 +415,27 @@ export default function SubjectsScreen() {
             onPress={() => router.push("/semesters")}
           >
             <Plus size={18} color={C.white} />
-
-            <Text style={styles.primaryText}>Add Semester</Text>
+            <Text style={styles.primaryText}>
+              Add Semester
+            </Text>
           </Pressable>
         </View>
       ) : (
         <>
           <Pressable
             style={styles.semesterDropdown}
-            onPress={() => setShowDropdown((current) => !current)}
+            onPress={() =>
+              setShowDropdown((current) => !current)
+            }
           >
             <View style={styles.semesterIcon}>
               <CalendarDays size={22} color={C.blue} />
             </View>
 
             <View style={styles.semesterInfo}>
-              <Text style={styles.dropdownLabel}>SELECTED SEMESTER</Text>
+              <Text style={styles.dropdownLabel}>
+                SELECTED SEMESTER
+              </Text>
 
               <Text style={styles.dropdownValue}>
                 {selectedSemester?.name ?? "Choose Semester"}
@@ -395,20 +457,26 @@ export default function SubjectsScreen() {
             <View style={styles.dropdownOptions}>
               {semesters.map((semester) => {
                 const count = subjects.filter(
-                  (subject) => subject.semester_id === semester.id,
+                  (subject) =>
+                    subject.semester_id === semester.id,
                 ).length;
 
                 return (
                   <Pressable
                     key={semester.id}
-                    onPress={() => selectSemester(semester.id)}
+                    onPress={() =>
+                      selectSemester(semester.id)
+                    }
                     style={[
                       styles.dropdownOption,
-                      semesterId === semester.id && styles.dropdownOptionActive,
+                      semesterId === semester.id &&
+                        styles.dropdownOptionActive,
                     ]}
                   >
                     <View style={styles.optionInfo}>
-                      <Text style={styles.optionName}>{semester.name}</Text>
+                      <Text style={styles.optionName}>
+                        {semester.name}
+                      </Text>
 
                       <Text style={styles.optionYear}>
                         {semester.academic_year}
@@ -429,21 +497,31 @@ export default function SubjectsScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Layers size={21} color={C.blue} />
-              <Text style={styles.statValue}>{uniqueCourses}</Text>
-              <Text style={styles.statLabel}>Unique Courses</Text>
+              <Text style={styles.statValue}>
+                {uniqueCourses}
+              </Text>
+              <Text style={styles.statLabel}>
+                Unique Courses
+              </Text>
             </View>
 
             <View style={styles.statCard}>
               <BookOpen size={21} color={C.blue} />
-              <Text style={styles.statValue}>{semesterSubjects.length}</Text>
-              <Text style={styles.statLabel}>Subject Entries</Text>
+              <Text style={styles.statValue}>
+                {semesterSubjects.length}
+              </Text>
+              <Text style={styles.statLabel}>
+                Subject Entries
+              </Text>
             </View>
           </View>
 
           <View style={styles.typeSummary}>
             <View style={styles.typeSummaryItem}>
               <View style={styles.theoryDot} />
-              <Text style={styles.typeSummaryText}>Theory: {theoryCount}</Text>
+              <Text style={styles.typeSummaryText}>
+                Theory: {theoryCount}
+              </Text>
             </View>
 
             <View style={styles.typeSummaryItem}>
@@ -461,14 +539,21 @@ export default function SubjectsScreen() {
 
             <GraduationCap size={21} color={C.blue} />
 
-            <Text style={styles.sectionTitle}>Semester Subjects</Text>
+            <Text style={styles.sectionTitle}>
+              Semester Subjects
+            </Text>
           </View>
 
           {!showForm && (
-            <Pressable style={styles.primaryButton} onPress={startAdd}>
+            <Pressable
+              style={styles.primaryButton}
+              onPress={startAdd}
+            >
               <Plus size={19} color={C.white} />
 
-              <Text style={styles.primaryText}>Add Subject</Text>
+              <Text style={styles.primaryText}>
+                Add Subject
+              </Text>
             </Pressable>
           )}
 
@@ -476,7 +561,9 @@ export default function SubjectsScreen() {
             <View style={styles.formCard}>
               <View style={styles.formHeader}>
                 <Text style={styles.formTitle}>
-                  {editingId !== null ? "Edit Subject" : "Add New Subject"}
+                  {editingId !== null
+                    ? "Edit Subject"
+                    : "Add New Subject"}
                 </Text>
 
                 <Pressable
@@ -490,12 +577,15 @@ export default function SubjectsScreen() {
 
               <View style={styles.formSemester}>
                 <CalendarDays size={17} color={C.blue} />
+
                 <Text style={styles.formSemesterText}>
                   {selectedSemester?.name}
                 </Text>
               </View>
 
-              <Text style={styles.label}>Course Code</Text>
+              <Text style={styles.label}>
+                Course Code
+              </Text>
 
               <TextInput
                 style={styles.input}
@@ -507,7 +597,9 @@ export default function SubjectsScreen() {
                 maxLength={30}
               />
 
-              <Text style={styles.label}>Course Name</Text>
+              <Text style={styles.label}>
+                Course Name
+              </Text>
 
               <TextInput
                 style={styles.input}
@@ -518,7 +610,9 @@ export default function SubjectsScreen() {
                 maxLength={120}
               />
 
-              <Text style={styles.label}>Credits</Text>
+              <Text style={styles.label}>
+                Credits
+              </Text>
 
               <TextInput
                 style={styles.input}
@@ -529,39 +623,53 @@ export default function SubjectsScreen() {
                 placeholderTextColor="#9AA7BB"
               />
 
-              <Text style={styles.label}>Subject Type</Text>
+              <Text style={styles.label}>
+                Subject Type
+              </Text>
 
               <View style={styles.typeRow}>
-                {(["Theory", "Practical"] as SubjectType[]).map((option) => (
-                  <Pressable
-                    key={option}
-                    onPress={() => setType(option)}
-                    style={[
-                      styles.typeButton,
-                      type === option && styles.typeButtonActive,
-                    ]}
-                  >
-                    {type === option && <Check size={16} color={C.white} />}
-
-                    <Text
+                {(["Theory", "Practical"] as SubjectType[]).map(
+                  (option) => (
+                    <Pressable
+                      key={option}
+                      onPress={() => setType(option)}
                       style={[
-                        styles.typeButtonText,
-                        type === option && styles.typeButtonTextActive,
+                        styles.typeButton,
+                        type === option &&
+                          styles.typeButtonActive,
                       ]}
                     >
-                      {option}
-                    </Text>
-                  </Pressable>
-                ))}
+                      {type === option && (
+                        <Check size={16} color={C.white} />
+                      )}
+
+                      <Text
+                        style={[
+                          styles.typeButtonText,
+                          type === option &&
+                            styles.typeButtonTextActive,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </Pressable>
+                  ),
+                )}
               </View>
 
               <Pressable
-                style={[styles.saveButton, saving && styles.disabled]}
+                style={[
+                  styles.saveButton,
+                  saving && styles.disabled,
+                ]}
                 onPress={saveSubject}
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color={C.white} />
+                  <ActivityIndicator
+                    size="small"
+                    color={C.white}
+                  />
                 ) : (
                   <Save size={18} color={C.white} />
                 )}
@@ -580,17 +688,112 @@ export default function SubjectsScreen() {
                 onPress={resetForm}
                 disabled={saving}
               >
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>
+                  Cancel
+                </Text>
               </Pressable>
             </View>
           )}
 
-          <View style={styles.resultsHeader}>
-            <Text style={styles.resultsLabel}>
-              {semesterSubjects.length} subject entries
+          <View style={styles.searchCard}>
+            <View style={styles.searchHeader}>
+              <Search size={19} color={C.blue} />
+
+              <Text style={styles.searchTitle}>
+                Search Subjects
+              </Text>
+            </View>
+
+            <View style={styles.searchInputWrap}>
+              <Search size={19} color={C.muted} />
+
+              <TextInput
+                style={styles.searchInput}
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search name or course code..."
+                placeholderTextColor="#9AA7BB"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+
+              {search.length > 0 && (
+                <Pressable
+                  onPress={() => setSearch("")}
+                  style={styles.clearSearchButton}
+                >
+                  <X size={18} color={C.muted} />
+                </Pressable>
+              )}
+            </View>
+
+            <Text style={styles.filterLabel}>
+              Filter by Type
             </Text>
 
-            <Text style={styles.resultsHint}>{selectedSemester?.name}</Text>
+            <View style={styles.filterRow}>
+              {(
+                ["All", "Theory", "Practical"] as SubjectFilter[]
+              ).map((option) => {
+                const count =
+                  option === "All"
+                    ? semesterSubjects.length
+                    : option === "Theory"
+                      ? theoryCount
+                      : practicalCount;
+
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      setFilter(option);
+                      Keyboard.dismiss();
+                    }}
+                    style={[
+                      styles.filterButton,
+                      filter === option &&
+                        styles.filterButtonActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterButtonText,
+                        filter === option &&
+                          styles.filterButtonTextActive,
+                      ]}
+                    >
+                      {option} ({count})
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.searchFooter}>
+              <Text style={styles.searchResultText}>
+                Showing {filteredSubjects.length} of{" "}
+                {semesterSubjects.length} entries
+              </Text>
+
+              {hasActiveFilters && (
+                <Pressable onPress={clearFilters}>
+                  <Text style={styles.resetText}>
+                    Clear Filters
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.resultsHeader}>
+            <Text style={styles.resultsLabel}>
+              {filteredSubjects.length} subject entries
+            </Text>
+
+            <Text style={styles.resultsHint}>
+              {selectedSemester?.name}
+            </Text>
           </View>
 
           {semesterSubjects.length === 0 ? (
@@ -605,18 +808,46 @@ export default function SubjectsScreen() {
                 Add your first subject for the selected semester.
               </Text>
             </View>
+          ) : filteredSubjects.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Search size={35} color="#A7B8D7" />
+
+              <Text style={styles.emptyTitle}>
+                No Matching Subjects
+              </Text>
+
+              <Text style={styles.emptyText}>
+                Try a different course name, code or subject type.
+              </Text>
+
+              <Pressable
+                style={styles.clearFiltersButton}
+                onPress={clearFilters}
+              >
+                <Text style={styles.clearFiltersText}>
+                  Clear Filters
+                </Text>
+              </Pressable>
+            </View>
           ) : (
-            semesterSubjects.map((subject) => (
-              <View key={subject.id} style={styles.subjectCard}>
+            filteredSubjects.map((subject) => (
+              <View
+                key={subject.id}
+                style={styles.subjectCard}
+              >
                 <View style={styles.subjectTop}>
                   <View style={styles.subjectIcon}>
                     <BookOpen size={22} color={C.blue} />
                   </View>
 
                   <View style={styles.subjectInfo}>
-                    <Text style={styles.subjectName}>{subject.name}</Text>
+                    <Text style={styles.subjectName}>
+                      {subject.name}
+                    </Text>
 
-                    <Text style={styles.subjectCode}>{subject.code}</Text>
+                    <Text style={styles.subjectCode}>
+                      {subject.code}
+                    </Text>
                   </View>
 
                   <View
@@ -642,7 +873,10 @@ export default function SubjectsScreen() {
 
                 <View style={styles.subjectBottom}>
                   <View style={styles.creditBadge}>
-                    <GraduationCap size={16} color={C.blue} />
+                    <GraduationCap
+                      size={16}
+                      color={C.blue}
+                    />
 
                     <Text style={styles.creditText}>
                       {subject.credits} Credits
@@ -653,20 +887,32 @@ export default function SubjectsScreen() {
                     <Pressable
                       style={styles.editButton}
                       onPress={() => startEdit(subject)}
-                      disabled={saving || deletingId !== null}
+                      disabled={
+                        saving || deletingId !== null
+                      }
                     >
                       <Pencil size={17} color={C.blue} />
                     </Pressable>
 
                     <Pressable
                       style={styles.deleteButton}
-                      onPress={() => removeSubject(subject)}
-                      disabled={saving || deletingId !== null}
+                      onPress={() =>
+                        removeSubject(subject)
+                      }
+                      disabled={
+                        saving || deletingId !== null
+                      }
                     >
                       {deletingId === subject.id ? (
-                        <ActivityIndicator size="small" color={C.red} />
+                        <ActivityIndicator
+                          size="small"
+                          color={C.red}
+                        />
                       ) : (
-                        <Trash2 size={17} color={C.red} />
+                        <Trash2
+                          size={17}
+                          color={C.red}
+                        />
                       )}
                     </Pressable>
                   </View>
@@ -679,9 +925,10 @@ export default function SubjectsScreen() {
             <BookOpen size={19} color={C.blue} />
 
             <Text style={styles.noticeText}>
-              Subjects are organized by semester. The same course code can have
-              one Theory and one Practical entry, but duplicate entries of the
-              same type are not allowed.
+              Subjects are organized by semester.
+              The same course code can have one Theory
+              and one Practical entry, but duplicate
+              entries of the same type are not allowed.
             </Text>
           </View>
         </>
@@ -809,8 +1056,8 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 14,
     backgroundColor: C.lightBlue,
-    alignItems: "center",
     justifyContent: "center",
+    alignItems: "center",
   },
   semesterInfo: {
     flex: 1,
@@ -1032,6 +1279,107 @@ const styles = StyleSheet.create({
     color: C.muted,
     fontSize: 13,
     fontWeight: "700",
+  },
+  searchCard: {
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 17,
+    padding: 17,
+    marginBottom: 20,
+  },
+  searchHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginBottom: 15,
+  },
+  searchTitle: {
+    color: C.navy,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  searchInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F7F9FF",
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 13,
+    height: 51,
+    marginBottom: 17,
+  },
+  searchInput: {
+    flex: 1,
+    color: C.text,
+    fontSize: 14,
+    height: "100%",
+    paddingVertical: 0,
+  },
+  clearSearchButton: {
+    padding: 5,
+  },
+  filterLabel: {
+    color: C.muted,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 11,
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 15,
+  },
+  filterButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 11,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterButtonActive: {
+    backgroundColor: C.blue,
+    borderColor: C.blue,
+  },
+  filterButtonText: {
+    color: C.muted,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  filterButtonTextActive: {
+    color: C.white,
+  },
+  searchFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  searchResultText: {
+    color: C.muted,
+    fontSize: 11,
+    flexShrink: 1,
+  },
+  resetText: {
+    color: C.blue,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  clearFiltersButton: {
+    backgroundColor: C.lightBlue,
+    borderRadius: 11,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  clearFiltersText: {
+    color: C.blue,
+    fontSize: 13,
+    fontWeight: "800",
   },
   resultsHeader: {
     flexDirection: "row",
