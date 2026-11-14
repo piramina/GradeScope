@@ -1,3 +1,4 @@
+
 import { router, useFocusEffect } from "expo-router";
 import {
   BookOpen,
@@ -23,7 +24,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import {
@@ -60,6 +60,8 @@ type Course = {
   code: string;
   name: string;
   credits: number;
+  theoryCredits: number;
+  practicalCredits: number;
   types: string[];
 };
 
@@ -68,12 +70,13 @@ export default function GPAScreen() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [records, setRecords] = useState<GPARecord[]>([]);
   const [semesterId, setSemesterId] = useState<number | null>(null);
+
   const [showSemesterDropdown, setShowSemesterDropdown] = useState(false);
   const [filter, setFilter] = useState<FilterType>("All");
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
   const [showGradeOptions, setShowGradeOptions] = useState(false);
   const [gradeInputs, setGradeInputs] = useState<Record<string, Grade>>({});
-  const [creditInputs, setCreditInputs] = useState<Record<string, string>>({});
+
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
@@ -91,7 +94,10 @@ export default function GPAScreen() {
       setRecords(gradeRows);
 
       setSemesterId((current) => {
-        if (current !== null && semesterRows.some((s) => s.id === current)) {
+        if (
+          current !== null &&
+          semesterRows.some((semester) => semester.id === current)
+        ) {
           return current;
         }
 
@@ -117,9 +123,21 @@ export default function GPAScreen() {
     for (const subject of subjects) {
       const code = subject.code.trim().toUpperCase();
       const key = `${subject.semester_id}:${code}`;
+      const credit = Number(subject.credits);
+
       const existing = map.get(key);
 
       if (existing) {
+        existing.credits += credit;
+
+        if (subject.type === "Theory") {
+          existing.theoryCredits += credit;
+        }
+
+        if (subject.type === "Practical") {
+          existing.practicalCredits += credit;
+        }
+
         if (!existing.types.includes(subject.type)) {
           existing.types.push(subject.type);
         }
@@ -129,13 +147,17 @@ export default function GPAScreen() {
           semester_id: subject.semester_id,
           code,
           name: subject.name,
-          credits: subject.credits,
+          credits: credit,
+          theoryCredits: subject.type === "Theory" ? credit : 0,
+          practicalCredits: subject.type === "Practical" ? credit : 0,
           types: [subject.type],
         });
       }
     }
 
-    return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+    return [...map.values()].sort((a, b) =>
+      a.code.localeCompare(b.code),
+    );
   }, [subjects]);
 
   const selectedSemester = semesters.find(
@@ -156,7 +178,9 @@ export default function GPAScreen() {
     return map;
   }, [records]);
 
-  const findRecord = (course: Course) => recordMap.get(course.key);
+  const findRecord = (course: Course) => {
+    return recordMap.get(course.key);
+  };
 
   const selectedCourses = courses.filter(
     (course) => course.semester_id === semesterId,
@@ -178,12 +202,35 @@ export default function GPAScreen() {
 
   const pendingCount = selectedCourses.length - savedCount;
 
-  const semesterRecords = records.filter(
+  const calculatedRecords = useMemo(() => {
+    const courseMap = new Map(
+      courses.map((course) => [course.key, course]),
+    );
+
+    return records.map((record) => {
+      const key = `${record.semester_id}:${record.course_code
+        .trim()
+        .toUpperCase()}`;
+
+      const course = courseMap.get(key);
+
+      if (!course) {
+        return record;
+      }
+
+      return {
+        ...record,
+        credits: course.credits,
+      };
+    });
+  }, [records, courses]);
+
+  const semesterRecords = calculatedRecords.filter(
     (record) => record.semester_id === semesterId,
   );
 
   const semesterSummary = calculateGPA(semesterRecords);
-  const overallSummary = calculateGPA(records);
+  const overallSummary = calculateGPA(calculatedRecords);
 
   const selectSemester = (id: number) => {
     setSemesterId(id);
@@ -206,21 +253,24 @@ export default function GPAScreen() {
     }
 
     const existing = findRecord(course);
-    const selectedGrade = gradeInputs[course.key] ?? existing?.grade;
+    const selectedGrade =
+      gradeInputs[course.key] ?? existing?.grade;
 
     if (!selectedGrade) {
-      Alert.alert("Select Grade", "Please select your result grade.");
+      Alert.alert(
+        "Select Grade",
+        "Please select your result grade.",
+      );
       return;
     }
 
-    const creditText =
-      creditInputs[course.key] ?? String(existing?.credits ?? course.credits);
-    const credits = Number(creditText);
-
-    if (creditText.trim() === "" || !Number.isFinite(credits) || credits <= 0) {
+    if (
+      !Number.isFinite(course.credits) ||
+      course.credits <= 0
+    ) {
       Alert.alert(
         "Invalid Credits",
-        "Enter valid course credits greater than zero.",
+        "Please check your subject credits in Subject Management.",
       );
       return;
     }
@@ -231,7 +281,7 @@ export default function GPAScreen() {
       await saveGPARecord(
         course.semester_id,
         course.code,
-        credits,
+        course.credits,
         selectedGrade,
       );
 
@@ -241,13 +291,8 @@ export default function GPAScreen() {
         return next;
       });
 
-      setCreditInputs((old) => {
-        const next = { ...old };
-        delete next[course.key];
-        return next;
-      });
-
       await load();
+
       setExpandedCourse(null);
       setShowGradeOptions(false);
       Keyboard.dismiss();
@@ -269,7 +314,7 @@ export default function GPAScreen() {
   const remove = (course: Course) => {
     const existing = findRecord(course);
 
-    if (!existing || deletingKey !== null) {
+    if (!existing || deletingKey !== null || savingKey !== null) {
       return;
     }
 
@@ -295,18 +340,16 @@ export default function GPAScreen() {
                 return next;
               });
 
-              setCreditInputs((old) => {
-                const next = { ...old };
-                delete next[course.key];
-                return next;
-              });
-
               await load();
+
               setExpandedCourse(null);
               setShowGradeOptions(false);
             } catch (error) {
               console.error("GPA delete error:", error);
-              Alert.alert("Delete Failed", "Unable to delete this result.");
+              Alert.alert(
+                "Delete Failed",
+                "Unable to delete this result.",
+              );
             } finally {
               setDeletingKey(null);
             }
@@ -320,7 +363,9 @@ export default function GPAScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={C.blue} />
-        <Text style={styles.loadingText}>Loading academic results...</Text>
+        <Text style={styles.loadingText}>
+          Loading academic results...
+        </Text>
       </View>
     );
   }
@@ -332,12 +377,15 @@ export default function GPAScreen() {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.eyebrow}>ACADEMIC PERFORMANCE</Text>
+      <Text style={styles.eyebrow}>
+        ACADEMIC PERFORMANCE
+      </Text>
 
       <Text style={styles.heading}>GPA & CGPA</Text>
 
       <Text style={styles.subtitle}>
-        Select your semester and enter your course result grades.
+        Select your semester and record your course result grades.
+        Theory and Practical credits are combined automatically.
       </Text>
 
       <View style={styles.hero}>
@@ -349,7 +397,9 @@ export default function GPAScreen() {
         <Text style={styles.heroLabel}>OVERALL CGPA</Text>
 
         <Text style={styles.heroValue}>
-          {overallSummary.gpa === null ? "—" : overallSummary.gpa.toFixed(2)}
+          {overallSummary.gpa === null
+            ? "—"
+            : overallSummary.gpa.toFixed(2)}
           <Text style={styles.heroMax}> / 4.00</Text>
         </Text>
 
@@ -364,34 +414,46 @@ export default function GPAScreen() {
         <View style={styles.sectionNumber}>
           <Text style={styles.sectionNumberText}>01</Text>
         </View>
+
         <CalendarDays size={20} color={C.blue} />
-        <Text style={styles.sectionTitle}>Choose Semester</Text>
+
+        <Text style={styles.sectionTitle}>
+          Choose Semester
+        </Text>
       </View>
 
       {semesters.length === 0 ? (
         <View style={styles.card}>
-          <Text style={styles.muted}>No semesters available.</Text>
+          <Text style={styles.muted}>
+            No semesters available.
+          </Text>
 
           <Pressable
             style={styles.linkButton}
             onPress={() => router.push("/semesters")}
           >
             <PlusCircle size={18} color={C.blue} />
-            <Text style={styles.linkText}>Add Semester</Text>
+            <Text style={styles.linkText}>
+              Add Semester
+            </Text>
           </Pressable>
         </View>
       ) : (
         <>
           <Pressable
-            onPress={() => setShowSemesterDropdown((current) => !current)}
+            onPress={() =>
+              setShowSemesterDropdown((current) => !current)
+            }
             style={styles.semesterDropdown}
           >
             <View style={styles.semesterDropdownIcon}>
               <CalendarDays size={22} color={C.blue} />
             </View>
 
-            <View style={{ flex: 1 }}>
-              <Text style={styles.dropdownLabel}>SELECTED SEMESTER</Text>
+            <View style={styles.semesterDropdownInfo}>
+              <Text style={styles.dropdownLabel}>
+                SELECTED SEMESTER
+              </Text>
 
               <Text style={styles.dropdownValue}>
                 {selectedSemester?.name ?? "Select Semester"}
@@ -417,11 +479,14 @@ export default function GPAScreen() {
                   onPress={() => selectSemester(semester.id)}
                   style={[
                     styles.dropdownOption,
-                    semesterId === semester.id && styles.activeOption,
+                    semesterId === semester.id &&
+                      styles.activeOption,
                   ]}
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.optionTitle}>{semester.name}</Text>
+                  <View style={styles.semesterDropdownInfo}>
+                    <Text style={styles.optionTitle}>
+                      {semester.name}
+                    </Text>
 
                     <Text style={styles.optionSubtitle}>
                       {semester.academic_year}
@@ -438,7 +503,9 @@ export default function GPAScreen() {
 
           <View style={styles.summaryCard}>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>SEMESTER GPA</Text>
+              <Text style={styles.summaryLabel}>
+                SEMESTER GPA
+              </Text>
 
               <Text style={styles.summaryValue}>
                 {semesterSummary.gpa === null
@@ -450,9 +517,13 @@ export default function GPAScreen() {
             <View style={styles.summaryDivider} />
 
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>RECORDED CREDITS</Text>
+              <Text style={styles.summaryLabel}>
+                RECORDED CREDITS
+              </Text>
 
-              <Text style={styles.summaryValue}>{semesterSummary.credits}</Text>
+              <Text style={styles.summaryValue}>
+                {semesterSummary.credits}
+              </Text>
             </View>
           </View>
 
@@ -460,14 +531,21 @@ export default function GPAScreen() {
             <View style={styles.sectionNumber}>
               <Text style={styles.sectionNumberText}>02</Text>
             </View>
+
             <BookOpen size={20} color={C.blue} />
-            <Text style={styles.sectionTitle}>Course Results</Text>
+
+            <Text style={styles.sectionTitle}>
+              Course Results
+            </Text>
           </View>
 
           <View style={styles.progressCard}>
             <View style={styles.progressTop}>
-              <View>
-                <Text style={styles.progressTitle}>Results Progress</Text>
+              <View style={styles.progressInfo}>
+                <Text style={styles.progressTitle}>
+                  Results Progress
+                </Text>
+
                 <Text style={styles.progressSubtitle}>
                   {savedCount} of {selectedCourses.length} courses recorded
                 </Text>
@@ -475,7 +553,9 @@ export default function GPAScreen() {
 
               <Text style={styles.progressPercent}>
                 {selectedCourses.length > 0
-                  ? Math.round((savedCount / selectedCourses.length) * 100)
+                  ? Math.round(
+                      (savedCount / selectedCourses.length) * 100,
+                    )
                   : 0}
                 %
               </Text>
@@ -499,56 +579,68 @@ export default function GPAScreen() {
 
           <View style={styles.filterHeader}>
             <Filter size={16} color={C.muted} />
-            <Text style={styles.filterTitle}>Filter Courses</Text>
+
+            <Text style={styles.filterTitle}>
+              Filter Courses
+            </Text>
           </View>
 
           <View style={styles.filterRow}>
-            {(["All", "Saved", "Pending"] as FilterType[]).map((option) => {
-              const count =
-                option === "All"
-                  ? selectedCourses.length
-                  : option === "Saved"
-                    ? savedCount
-                    : pendingCount;
+            {(["All", "Saved", "Pending"] as FilterType[]).map(
+              (option) => {
+                const count =
+                  option === "All"
+                    ? selectedCourses.length
+                    : option === "Saved"
+                      ? savedCount
+                      : pendingCount;
 
-              return (
-                <Pressable
-                  key={option}
-                  onPress={() => {
-                    setFilter(option);
-                    setExpandedCourse(null);
-                    setShowGradeOptions(false);
-                  }}
-                  style={[
-                    styles.filterButton,
-                    filter === option && styles.filterButtonActive,
-                  ]}
-                >
-                  <Text
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      setFilter(option);
+                      setExpandedCourse(null);
+                      setShowGradeOptions(false);
+                    }}
                     style={[
-                      styles.filterButtonText,
-                      filter === option && styles.filterTextActive,
+                      styles.filterButton,
+                      filter === option &&
+                        styles.filterButtonActive,
                     ]}
                   >
-                    {option} ({count})
-                  </Text>
-                </Pressable>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.filterButtonText,
+                        filter === option &&
+                          styles.filterTextActive,
+                      ]}
+                    >
+                      {option} ({count})
+                    </Text>
+                  </Pressable>
+                );
+              },
+            )}
           </View>
 
           <View style={styles.resultsHeader}>
             <Text style={styles.resultsLabel}>
               {filteredCourses.length} courses
             </Text>
-            <Text style={styles.resultsHint}>Tap a course to edit</Text>
+
+            <Text style={styles.resultsHint}>
+              Tap a course to edit
+            </Text>
           </View>
 
           {selectedCourses.length === 0 ? (
             <View style={styles.emptyCard}>
               <BookOpen size={34} color="#A7B8D7" />
 
-              <Text style={styles.emptyTitle}>No courses in this semester</Text>
+              <Text style={styles.emptyTitle}>
+                No courses in this semester
+              </Text>
 
               <Text style={styles.emptyText}>
                 Add a subject to start recording grades.
@@ -559,14 +651,19 @@ export default function GPAScreen() {
                 onPress={() => router.push("/subjects")}
               >
                 <PlusCircle size={18} color={C.blue} />
-                <Text style={styles.linkText}>Manage Subjects</Text>
+
+                <Text style={styles.linkText}>
+                  Manage Subjects
+                </Text>
               </Pressable>
             </View>
           ) : filteredCourses.length === 0 ? (
             <View style={styles.emptyCard}>
               <Filter size={32} color="#A7B8D7" />
 
-              <Text style={styles.emptyTitle}>No courses in this filter</Text>
+              <Text style={styles.emptyTitle}>
+                No courses in this filter
+              </Text>
 
               <Text style={styles.emptyText}>
                 Select All to view every course.
@@ -576,7 +673,9 @@ export default function GPAScreen() {
                 onPress={() => setFilter("All")}
                 style={styles.linkButton}
               >
-                <Text style={styles.linkText}>Show All Courses</Text>
+                <Text style={styles.linkText}>
+                  Show All Courses
+                </Text>
               </Pressable>
             </View>
           ) : (
@@ -585,11 +684,9 @@ export default function GPAScreen() {
               const isExpanded = expandedCourse === course.key;
 
               const selectedGrade =
-                gradeInputs[course.key] ?? existing?.grade ?? null;
-
-              const creditValue =
-                creditInputs[course.key] ??
-                String(existing?.credits ?? course.credits);
+                gradeInputs[course.key] ??
+                existing?.grade ??
+                null;
 
               return (
                 <View
@@ -608,9 +705,13 @@ export default function GPAScreen() {
                     </View>
 
                     <View style={styles.courseInfo}>
-                      <Text style={styles.courseName}>{course.name}</Text>
+                      <Text style={styles.courseName}>
+                        {course.name}
+                      </Text>
 
-                      <Text style={styles.courseCode}>{course.code}</Text>
+                      <Text style={styles.courseCode}>
+                        {course.code}
+                      </Text>
 
                       <Text style={styles.courseTypes}>
                         {course.types.join(" + ")}
@@ -621,6 +722,7 @@ export default function GPAScreen() {
                       {existing ? (
                         <View style={styles.savedBadge}>
                           <CheckCircle2 size={13} color={C.green} />
+
                           <Text style={styles.savedText}>
                             {existing.grade ?? "Saved"}
                           </Text>
@@ -628,7 +730,10 @@ export default function GPAScreen() {
                       ) : (
                         <View style={styles.pendingBadge}>
                           <Clock3 size={13} color="#A46A1C" />
-                          <Text style={styles.pendingText}>Pending</Text>
+
+                          <Text style={styles.pendingText}>
+                            Pending
+                          </Text>
                         </View>
                       )}
 
@@ -647,30 +752,66 @@ export default function GPAScreen() {
                       {course.types.length > 1 && (
                         <View style={styles.infoBox}>
                           <Info size={17} color={C.blue} />
+
                           <Text style={styles.infoText}>
-                            Theory and Practical are grouped as one course.
-                            Enter the combined course grade and total credits.
+                            Theory and Practical are grouped
+                            as one course. Select one combined
+                            course grade.
                           </Text>
                         </View>
                       )}
 
-                      <Text style={styles.label}>Total Course Credits</Text>
+                      <Text style={styles.label}>
+                        Course Credit Breakdown
+                      </Text>
 
-                      <TextInput
-                        style={styles.creditInput}
-                        value={creditValue}
-                        onChangeText={(value) =>
-                          setCreditInputs((old) => ({
-                            ...old,
-                            [course.key]: value,
-                          }))
-                        }
-                        keyboardType="decimal-pad"
-                        placeholder="e.g. 3"
-                        placeholderTextColor="#9AA7BB"
-                      />
+                      <View style={styles.creditBreakdown}>
+                        {course.types.includes("Theory") && (
+                          <View style={styles.creditRow}>
+                            <Text style={styles.creditRowLabel}>
+                              Theory Credits
+                            </Text>
 
-                      <Text style={styles.label}>Your Result Grade</Text>
+                            <Text style={styles.creditRowValue}>
+                              {course.theoryCredits}
+                            </Text>
+                          </View>
+                        )}
+
+                        {course.types.includes("Practical") && (
+                          <View style={styles.creditRow}>
+                            <Text style={styles.creditRowLabel}>
+                              Practical Credits
+                            </Text>
+
+                            <Text style={styles.creditRowValue}>
+                              {course.practicalCredits}
+                            </Text>
+                          </View>
+                        )}
+
+                        <View style={styles.creditTotalRow}>
+                          <Text style={styles.creditTotalLabel}>
+                            Total Credits
+                          </Text>
+
+                          <Text style={styles.creditTotalValue}>
+                            {course.credits}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.autoCreditNotice}>
+                        <CheckCircle2 size={15} color={C.green} />
+
+                        <Text style={styles.autoCreditText}>
+                          Credits calculated automatically
+                        </Text>
+                      </View>
+
+                      <Text style={styles.label}>
+                        Your Result Grade
+                      </Text>
 
                       <Pressable
                         style={styles.gradeSelector}
@@ -678,16 +819,16 @@ export default function GPAScreen() {
                           setShowGradeOptions((current) => !current)
                         }
                       >
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.gradeSelectorInfo}>
                           <Text style={styles.gradeSelected}>
                             {selectedGrade ?? "Select Grade"}
                           </Text>
 
                           <Text style={styles.gradeHint}>
                             {selectedGrade
-                              ? `${getGradePoint(selectedGrade).toFixed(
-                                  1,
-                                )} grade points`
+                              ? `${getGradePoint(
+                                  selectedGrade,
+                                ).toFixed(1)} grade points`
                               : "Choose A+, A, A-, B+ ... E"}
                           </Text>
                         </View>
@@ -709,6 +850,7 @@ export default function GPAScreen() {
                                   ...old,
                                   [course.key]: grade,
                                 }));
+
                                 setShowGradeOptions(false);
                               }}
                               style={[
@@ -741,22 +883,39 @@ export default function GPAScreen() {
 
                       {existing && existing.grade === null && (
                         <Text style={styles.warning}>
-                          Previous numeric result found. Select the
-                          corresponding letter grade and save to update it.
+                          Previous numeric result found.
+                          Select the corresponding letter
+                          grade and save to update it.
                         </Text>
                       )}
 
+                      {existing &&
+                        existing.credits !== course.credits && (
+                          <Text style={styles.warning}>
+                            Course credits have changed.
+                            Update Result to save the
+                            latest total credits.
+                          </Text>
+                        )}
+
                       <Pressable
                         onPress={() => save(course)}
-                        disabled={savingKey !== null || deletingKey !== null}
+                        disabled={
+                          savingKey !== null ||
+                          deletingKey !== null
+                        }
                         style={[
                           styles.saveButton,
-                          (savingKey !== null || deletingKey !== null) &&
+                          (savingKey !== null ||
+                            deletingKey !== null) &&
                             styles.disabled,
                         ]}
                       >
                         {savingKey === course.key ? (
-                          <ActivityIndicator color={C.white} size="small" />
+                          <ActivityIndicator
+                            color={C.white}
+                            size="small"
+                          />
                         ) : (
                           <Save size={18} color={C.white} />
                         )}
@@ -773,10 +932,14 @@ export default function GPAScreen() {
                       {existing && (
                         <Pressable
                           onPress={() => remove(course)}
-                          disabled={savingKey !== null || deletingKey !== null}
+                          disabled={
+                            savingKey !== null ||
+                            deletingKey !== null
+                          }
                           style={styles.removeButton}
                         >
                           <Trash2 size={16} color={C.red} />
+
                           <Text style={styles.removeText}>
                             Remove Saved Result
                           </Text>
@@ -793,10 +956,13 @@ export default function GPAScreen() {
 
       <View style={styles.notice}>
         <Info size={20} color={C.blue} />
+
         <Text style={styles.noticeText}>
-          GPA and CGPA use your selected grades and recorded course credits.
-          Only saved course results are included. University-specific repeat and
-          eligibility rules are not applied.
+          GPA and CGPA use your saved letter grades
+          and automatically combined course credits.
+          Only saved course results are included.
+          University-specific repeat and eligibility
+          rules are not applied.
         </Text>
       </View>
     </ScrollView>
@@ -812,14 +978,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 60,
   },
-  card: {
-    backgroundColor: C.white,
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
   center: {
     flex: 1,
     justifyContent: "center",
@@ -828,8 +986,16 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: C.muted,
-    marginTop: 14,
     fontSize: 13,
+    marginTop: 14,
+  },
+  card: {
+    backgroundColor: C.white,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   eyebrow: {
     color: C.blue,
@@ -937,6 +1103,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  semesterDropdownInfo: {
+    flex: 1,
+  },
   dropdownLabel: {
     color: C.muted,
     fontSize: 10,
@@ -1020,6 +1189,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  progressInfo: {
+    flex: 1,
   },
   progressTitle: {
     color: C.text,
@@ -1190,16 +1362,58 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 9,
   },
-  creditInput: {
+  creditBreakdown: {
     borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
-    height: 50,
-    paddingHorizontal: 13,
-    color: C.text,
-    fontSize: 16,
+    borderColor: "#C5D8F5",
+    borderRadius: 13,
+    backgroundColor: "#F7F9FF",
+    padding: 14,
+    marginBottom: 10,
+    gap: 12,
+  },
+  creditRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  creditRowLabel: {
+    color: C.muted,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  creditRowValue: {
+    color: C.navy,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  creditTotalRow: {
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  creditTotalLabel: {
+    color: C.navy,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  creditTotalValue: {
+    color: C.blue,
+    fontSize: 21,
+    fontWeight: "800",
+  },
+  autoCreditNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginBottom: 20,
+  },
+  autoCreditText: {
+    color: C.green,
+    fontSize: 11,
     fontWeight: "700",
-    marginBottom: 18,
   },
   gradeSelector: {
     backgroundColor: "#F7F9FF",
@@ -1210,6 +1424,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 14,
+  },
+  gradeSelectorInfo: {
+    flex: 1,
   },
   gradeSelected: {
     color: C.navy,
