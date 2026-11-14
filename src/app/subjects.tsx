@@ -6,6 +6,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Eye,
   GraduationCap,
   Layers,
   Pencil,
@@ -20,6 +21,7 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -69,6 +71,8 @@ export default function SubjectsScreen() {
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<SubjectFilter>("All");
+
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -156,6 +160,36 @@ export default function SubjectsScreen() {
     (subject) => subject.type === "Practical",
   ).length;
 
+  const selectedCourseParts = useMemo(() => {
+    if (!selectedSubject) {
+      return [];
+    }
+
+    const selectedCode = selectedSubject.code.trim().toUpperCase();
+
+    return subjects.filter(
+      (subject) =>
+        subject.semester_id === selectedSubject.semester_id &&
+        subject.code.trim().toUpperCase() === selectedCode,
+    );
+  }, [subjects, selectedSubject]);
+
+  const theoryCredits = selectedCourseParts
+    .filter((subject) => subject.type === "Theory")
+    .reduce((sum, subject) => sum + Number(subject.credits), 0);
+
+  const practicalCredits = selectedCourseParts
+    .filter((subject) => subject.type === "Practical")
+    .reduce((sum, subject) => sum + Number(subject.credits), 0);
+
+  const totalCredits = theoryCredits + practicalCredits;
+
+  const detailsSemester = selectedSubject
+    ? semesters.find(
+        (semester) => semester.id === selectedSubject.semester_id,
+      )
+    : null;
+
   const hasActiveFilters = search.trim() !== "" || filter !== "All";
 
   const clearFilters = () => {
@@ -177,6 +211,7 @@ export default function SubjectsScreen() {
   const selectSemester = (id: number) => {
     setSemesterId(id);
     setShowDropdown(false);
+    setSelectedSubject(null);
     clearFilters();
     resetForm();
   };
@@ -199,6 +234,7 @@ export default function SubjectsScreen() {
     setCredits(String(subject.credits));
     setType(subject.type);
     setShowDropdown(false);
+    setSelectedSubject(null);
     setShowForm(true);
     Keyboard.dismiss();
   };
@@ -319,6 +355,10 @@ export default function SubjectsScreen() {
                 resetForm();
               }
 
+              if (selectedSubject?.id === subject.id) {
+                setSelectedSubject(null);
+              }
+
               await load();
             } catch (error) {
               console.error("Subject delete error:", error);
@@ -347,597 +387,782 @@ export default function SubjectsScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.eyebrow}>
-        ACADEMIC MANAGEMENT
-      </Text>
-
-      <Text style={styles.heading}>
-        Manage Subjects
-      </Text>
-
-      <Text style={styles.subtitle}>
-        Organize, search and filter your subjects semester by semester.
-      </Text>
-
-      <View style={styles.hero}>
-        <View style={styles.heroTop}>
-          <BookOpen size={28} color="#CFE0FF" />
-          <Text style={styles.heroTag}>
-            OFFLINE STORAGE
-          </Text>
-        </View>
-
-        <Text style={styles.heroLabel}>
-          SUBJECT MANAGER
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.eyebrow}>
+          ACADEMIC MANAGEMENT
         </Text>
 
-        <Text style={styles.heroTitle}>
-          Your Courses
+        <Text style={styles.heading}>
+          Manage Subjects
         </Text>
 
-        <Text style={styles.heroDescription}>
-          Add and manage Theory and Practical subjects in each semester.
+        <Text style={styles.subtitle}>
+          Organize, search and filter your subjects semester by semester.
         </Text>
-      </View>
 
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionNumber}>
-          <Text style={styles.sectionNumberText}>01</Text>
-        </View>
-
-        <CalendarDays size={20} color={C.blue} />
-
-        <Text style={styles.sectionTitle}>
-          Choose Semester
-        </Text>
-      </View>
-
-      {semesters.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <CalendarDays size={35} color="#A7B8D7" />
-
-          <Text style={styles.emptyTitle}>
-            No semesters available
-          </Text>
-
-          <Text style={styles.emptyText}>
-            Create a semester before adding subjects.
-          </Text>
-
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => router.push("/semesters")}
-          >
-            <Plus size={18} color={C.white} />
-            <Text style={styles.primaryText}>
-              Add Semester
-            </Text>
-          </Pressable>
-        </View>
-      ) : (
-        <>
-          <Pressable
-            style={styles.semesterDropdown}
-            onPress={() =>
-              setShowDropdown((current) => !current)
-            }
-          >
-            <View style={styles.semesterIcon}>
-              <CalendarDays size={22} color={C.blue} />
-            </View>
-
-            <View style={styles.semesterInfo}>
-              <Text style={styles.dropdownLabel}>
-                SELECTED SEMESTER
-              </Text>
-
-              <Text style={styles.dropdownValue}>
-                {selectedSemester?.name ?? "Choose Semester"}
-              </Text>
-
-              <Text style={styles.dropdownYear}>
-                {selectedSemester?.academic_year}
-              </Text>
-            </View>
-
-            {showDropdown ? (
-              <ChevronUp size={21} color={C.blue} />
-            ) : (
-              <ChevronDown size={21} color={C.blue} />
-            )}
-          </Pressable>
-
-          {showDropdown && (
-            <View style={styles.dropdownOptions}>
-              {semesters.map((semester) => {
-                const count = subjects.filter(
-                  (subject) =>
-                    subject.semester_id === semester.id,
-                ).length;
-
-                return (
-                  <Pressable
-                    key={semester.id}
-                    onPress={() =>
-                      selectSemester(semester.id)
-                    }
-                    style={[
-                      styles.dropdownOption,
-                      semesterId === semester.id &&
-                        styles.dropdownOptionActive,
-                    ]}
-                  >
-                    <View style={styles.optionInfo}>
-                      <Text style={styles.optionName}>
-                        {semester.name}
-                      </Text>
-
-                      <Text style={styles.optionYear}>
-                        {semester.academic_year}
-                        {"  •  "}
-                        {count} entries
-                      </Text>
-                    </View>
-
-                    {semesterId === semester.id && (
-                      <Check size={19} color={C.blue} />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Layers size={21} color={C.blue} />
-              <Text style={styles.statValue}>
-                {uniqueCourses}
-              </Text>
-              <Text style={styles.statLabel}>
-                Unique Courses
-              </Text>
-            </View>
-
-            <View style={styles.statCard}>
-              <BookOpen size={21} color={C.blue} />
-              <Text style={styles.statValue}>
-                {semesterSubjects.length}
-              </Text>
-              <Text style={styles.statLabel}>
-                Subject Entries
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.typeSummary}>
-            <View style={styles.typeSummaryItem}>
-              <View style={styles.theoryDot} />
-              <Text style={styles.typeSummaryText}>
-                Theory: {theoryCount}
-              </Text>
-            </View>
-
-            <View style={styles.typeSummaryItem}>
-              <View style={styles.practicalDot} />
-              <Text style={styles.typeSummaryText}>
-                Practical: {practicalCount}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionNumber}>
-              <Text style={styles.sectionNumberText}>02</Text>
-            </View>
-
-            <GraduationCap size={21} color={C.blue} />
-
-            <Text style={styles.sectionTitle}>
-              Semester Subjects
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <BookOpen size={28} color="#CFE0FF" />
+            <Text style={styles.heroTag}>
+              OFFLINE STORAGE
             </Text>
           </View>
 
-          {!showForm && (
+          <Text style={styles.heroLabel}>
+            SUBJECT MANAGER
+          </Text>
+
+          <Text style={styles.heroTitle}>
+            Your Courses
+          </Text>
+
+          <Text style={styles.heroDescription}>
+            Add and manage Theory and Practical subjects in each semester.
+          </Text>
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionNumber}>
+            <Text style={styles.sectionNumberText}>
+              01
+            </Text>
+          </View>
+
+          <CalendarDays size={20} color={C.blue} />
+
+          <Text style={styles.sectionTitle}>
+            Choose Semester
+          </Text>
+        </View>
+
+        {semesters.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <CalendarDays size={35} color="#A7B8D7" />
+
+            <Text style={styles.emptyTitle}>
+              No semesters available
+            </Text>
+
+            <Text style={styles.emptyText}>
+              Create a semester before adding subjects.
+            </Text>
+
             <Pressable
               style={styles.primaryButton}
-              onPress={startAdd}
+              onPress={() => router.push("/semesters")}
             >
-              <Plus size={19} color={C.white} />
-
+              <Plus size={18} color={C.white} />
               <Text style={styles.primaryText}>
-                Add Subject
+                Add Semester
               </Text>
             </Pressable>
-          )}
-
-          {showForm && (
-            <View style={styles.formCard}>
-              <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>
-                  {editingId !== null
-                    ? "Edit Subject"
-                    : "Add New Subject"}
-                </Text>
-
-                <Pressable
-                  onPress={resetForm}
-                  disabled={saving}
-                  style={styles.closeButton}
-                >
-                  <X size={20} color={C.muted} />
-                </Pressable>
+          </View>
+        ) : (
+          <>
+            <Pressable
+              style={styles.semesterDropdown}
+              onPress={() =>
+                setShowDropdown((current) => !current)
+              }
+            >
+              <View style={styles.semesterIcon}>
+                <CalendarDays size={22} color={C.blue} />
               </View>
 
-              <View style={styles.formSemester}>
-                <CalendarDays size={17} color={C.blue} />
+              <View style={styles.semesterInfo}>
+                <Text style={styles.dropdownLabel}>
+                  SELECTED SEMESTER
+                </Text>
 
-                <Text style={styles.formSemesterText}>
-                  {selectedSemester?.name}
+                <Text style={styles.dropdownValue}>
+                  {selectedSemester?.name ?? "Choose Semester"}
+                </Text>
+
+                <Text style={styles.dropdownYear}>
+                  {selectedSemester?.academic_year}
                 </Text>
               </View>
 
-              <Text style={styles.label}>
-                Course Code
-              </Text>
+              {showDropdown ? (
+                <ChevronUp size={21} color={C.blue} />
+              ) : (
+                <ChevronDown size={21} color={C.blue} />
+              )}
+            </Pressable>
 
-              <TextInput
-                style={styles.input}
-                value={code}
-                onChangeText={setCode}
-                placeholder="e.g. CSC2201"
-                placeholderTextColor="#9AA7BB"
-                autoCapitalize="characters"
-                maxLength={30}
-              />
+            {showDropdown && (
+              <View style={styles.dropdownOptions}>
+                {semesters.map((semester) => {
+                  const count = subjects.filter(
+                    (subject) =>
+                      subject.semester_id === semester.id,
+                  ).length;
 
-              <Text style={styles.label}>
-                Course Name
-              </Text>
-
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="e.g. Database Systems"
-                placeholderTextColor="#9AA7BB"
-                maxLength={120}
-              />
-
-              <Text style={styles.label}>
-                Credits
-              </Text>
-
-              <TextInput
-                style={styles.input}
-                value={credits}
-                onChangeText={setCredits}
-                keyboardType="decimal-pad"
-                placeholder="e.g. 3"
-                placeholderTextColor="#9AA7BB"
-              />
-
-              <Text style={styles.label}>
-                Subject Type
-              </Text>
-
-              <View style={styles.typeRow}>
-                {(["Theory", "Practical"] as SubjectType[]).map(
-                  (option) => (
+                  return (
                     <Pressable
-                      key={option}
-                      onPress={() => setType(option)}
+                      key={semester.id}
+                      onPress={() =>
+                        selectSemester(semester.id)
+                      }
                       style={[
-                        styles.typeButton,
-                        type === option &&
-                          styles.typeButtonActive,
+                        styles.dropdownOption,
+                        semesterId === semester.id &&
+                          styles.dropdownOptionActive,
                       ]}
                     >
-                      {type === option && (
-                        <Check size={16} color={C.white} />
-                      )}
+                      <View style={styles.optionInfo}>
+                        <Text style={styles.optionName}>
+                          {semester.name}
+                        </Text>
 
-                      <Text
+                        <Text style={styles.optionYear}>
+                          {semester.academic_year}
+                          {"  •  "}
+                          {count} entries
+                        </Text>
+                      </View>
+
+                      {semesterId === semester.id && (
+                        <Check size={19} color={C.blue} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Layers size={21} color={C.blue} />
+                <Text style={styles.statValue}>
+                  {uniqueCourses}
+                </Text>
+                <Text style={styles.statLabel}>
+                  Unique Courses
+                </Text>
+              </View>
+
+              <View style={styles.statCard}>
+                <BookOpen size={21} color={C.blue} />
+                <Text style={styles.statValue}>
+                  {semesterSubjects.length}
+                </Text>
+                <Text style={styles.statLabel}>
+                  Subject Entries
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.typeSummary}>
+              <View style={styles.typeSummaryItem}>
+                <View style={styles.theoryDot} />
+                <Text style={styles.typeSummaryText}>
+                  Theory: {theoryCount}
+                </Text>
+              </View>
+
+              <View style={styles.typeSummaryItem}>
+                <View style={styles.practicalDot} />
+                <Text style={styles.typeSummaryText}>
+                  Practical: {practicalCount}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionNumber}>
+                <Text style={styles.sectionNumberText}>
+                  02
+                </Text>
+              </View>
+
+              <GraduationCap size={21} color={C.blue} />
+
+              <Text style={styles.sectionTitle}>
+                Semester Subjects
+              </Text>
+            </View>
+
+            {!showForm && (
+              <Pressable
+                style={styles.primaryButton}
+                onPress={startAdd}
+              >
+                <Plus size={19} color={C.white} />
+
+                <Text style={styles.primaryText}>
+                  Add Subject
+                </Text>
+              </Pressable>
+            )}
+
+            {showForm && (
+              <View style={styles.formCard}>
+                <View style={styles.formHeader}>
+                  <Text style={styles.formTitle}>
+                    {editingId !== null
+                      ? "Edit Subject"
+                      : "Add New Subject"}
+                  </Text>
+
+                  <Pressable
+                    onPress={resetForm}
+                    disabled={saving}
+                    style={styles.closeButton}
+                  >
+                    <X size={20} color={C.muted} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.formSemester}>
+                  <CalendarDays size={17} color={C.blue} />
+
+                  <Text style={styles.formSemesterText}>
+                    {selectedSemester?.name}
+                  </Text>
+                </View>
+
+                <Text style={styles.label}>
+                  Course Code
+                </Text>
+
+                <TextInput
+                  style={styles.input}
+                  value={code}
+                  onChangeText={setCode}
+                  placeholder="e.g. CSC2201"
+                  placeholderTextColor="#9AA7BB"
+                  autoCapitalize="characters"
+                  maxLength={30}
+                />
+
+                <Text style={styles.label}>
+                  Course Name
+                </Text>
+
+                <TextInput
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="e.g. Database Systems"
+                  placeholderTextColor="#9AA7BB"
+                  maxLength={120}
+                />
+
+                <Text style={styles.label}>
+                  Credits
+                </Text>
+
+                <TextInput
+                  style={styles.input}
+                  value={credits}
+                  onChangeText={setCredits}
+                  keyboardType="decimal-pad"
+                  placeholder="e.g. 3"
+                  placeholderTextColor="#9AA7BB"
+                />
+
+                <Text style={styles.label}>
+                  Subject Type
+                </Text>
+
+                <View style={styles.typeRow}>
+                  {(["Theory", "Practical"] as SubjectType[]).map(
+                    (option) => (
+                      <Pressable
+                        key={option}
+                        onPress={() => setType(option)}
                         style={[
-                          styles.typeButtonText,
+                          styles.typeButton,
                           type === option &&
-                            styles.typeButtonTextActive,
+                            styles.typeButtonActive,
                         ]}
                       >
-                        {option}
-                      </Text>
-                    </Pressable>
-                  ),
+                        {type === option && (
+                          <Check
+                            size={16}
+                            color={C.white}
+                          />
+                        )}
+
+                        <Text
+                          style={[
+                            styles.typeButtonText,
+                            type === option &&
+                              styles.typeButtonTextActive,
+                          ]}
+                        >
+                          {option}
+                        </Text>
+                      </Pressable>
+                    ),
+                  )}
+                </View>
+
+                <Pressable
+                  style={[
+                    styles.saveButton,
+                    saving && styles.disabled,
+                  ]}
+                  onPress={saveSubject}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={C.white}
+                    />
+                  ) : (
+                    <Save size={18} color={C.white} />
+                  )}
+
+                  <Text style={styles.saveText}>
+                    {saving
+                      ? "Saving..."
+                      : editingId !== null
+                        ? "Update Subject"
+                        : "Save Subject"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.cancelButton}
+                  onPress={resetForm}
+                  disabled={saving}
+                >
+                  <Text style={styles.cancelText}>
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+            <View style={styles.searchCard}>
+              <View style={styles.searchHeader}>
+                <Search size={19} color={C.blue} />
+
+                <Text style={styles.searchTitle}>
+                  Search Subjects
+                </Text>
+              </View>
+
+              <View style={styles.searchInputWrap}>
+                <Search size={19} color={C.muted} />
+
+                <TextInput
+                  style={styles.searchInput}
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Search name or course code..."
+                  placeholderTextColor="#9AA7BB"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                />
+
+                {search.length > 0 && (
+                  <Pressable
+                    onPress={() => setSearch("")}
+                    style={styles.clearSearchButton}
+                  >
+                    <X size={18} color={C.muted} />
+                  </Pressable>
                 )}
               </View>
 
-              <Pressable
-                style={[
-                  styles.saveButton,
-                  saving && styles.disabled,
-                ]}
-                onPress={saveSubject}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={C.white}
-                  />
-                ) : (
-                  <Save size={18} color={C.white} />
-                )}
-
-                <Text style={styles.saveText}>
-                  {saving
-                    ? "Saving..."
-                    : editingId !== null
-                      ? "Update Subject"
-                      : "Save Subject"}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.cancelButton}
-                onPress={resetForm}
-                disabled={saving}
-              >
-                <Text style={styles.cancelText}>
-                  Cancel
-                </Text>
-              </Pressable>
-            </View>
-          )}
-
-          <View style={styles.searchCard}>
-            <View style={styles.searchHeader}>
-              <Search size={19} color={C.blue} />
-
-              <Text style={styles.searchTitle}>
-                Search Subjects
+              <Text style={styles.filterLabel}>
+                Filter by Type
               </Text>
-            </View>
 
-            <View style={styles.searchInputWrap}>
-              <Search size={19} color={C.muted} />
+              <View style={styles.filterRow}>
+                {(
+                  ["All", "Theory", "Practical"] as SubjectFilter[]
+                ).map((option) => {
+                  const count =
+                    option === "All"
+                      ? semesterSubjects.length
+                      : option === "Theory"
+                        ? theoryCount
+                        : practicalCount;
 
-              <TextInput
-                style={styles.searchInput}
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search name or course code..."
-                placeholderTextColor="#9AA7BB"
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-              />
-
-              {search.length > 0 && (
-                <Pressable
-                  onPress={() => setSearch("")}
-                  style={styles.clearSearchButton}
-                >
-                  <X size={18} color={C.muted} />
-                </Pressable>
-              )}
-            </View>
-
-            <Text style={styles.filterLabel}>
-              Filter by Type
-            </Text>
-
-            <View style={styles.filterRow}>
-              {(
-                ["All", "Theory", "Practical"] as SubjectFilter[]
-              ).map((option) => {
-                const count =
-                  option === "All"
-                    ? semesterSubjects.length
-                    : option === "Theory"
-                      ? theoryCount
-                      : practicalCount;
-
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => {
-                      setFilter(option);
-                      Keyboard.dismiss();
-                    }}
-                    style={[
-                      styles.filterButton,
-                      filter === option &&
-                        styles.filterButtonActive,
-                    ]}
-                  >
-                    <Text
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => {
+                        setFilter(option);
+                        Keyboard.dismiss();
+                      }}
                       style={[
-                        styles.filterButtonText,
+                        styles.filterButton,
                         filter === option &&
-                          styles.filterButtonTextActive,
+                          styles.filterButtonActive,
                       ]}
                     >
-                      {option} ({count})
+                      <Text
+                        style={[
+                          styles.filterButtonText,
+                          filter === option &&
+                            styles.filterButtonTextActive,
+                        ]}
+                      >
+                        {option} ({count})
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.searchFooter}>
+                <Text style={styles.searchResultText}>
+                  Showing {filteredSubjects.length} of{" "}
+                  {semesterSubjects.length} entries
+                </Text>
+
+                {hasActiveFilters && (
+                  <Pressable onPress={clearFilters}>
+                    <Text style={styles.resetText}>
+                      Clear Filters
                     </Text>
                   </Pressable>
-                );
-              })}
+                )}
+              </View>
             </View>
 
-            <View style={styles.searchFooter}>
-              <Text style={styles.searchResultText}>
-                Showing {filteredSubjects.length} of{" "}
-                {semesterSubjects.length} entries
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultsLabel}>
+                {filteredSubjects.length} subject entries
               </Text>
 
-              {hasActiveFilters && (
-                <Pressable onPress={clearFilters}>
-                  <Text style={styles.resetText}>
+              <Text style={styles.resultsHint}>
+                {selectedSemester?.name}
+              </Text>
+            </View>
+
+            {semesterSubjects.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <BookOpen size={35} color="#A7B8D7" />
+
+                <Text style={styles.emptyTitle}>
+                  No subjects in this semester
+                </Text>
+
+                <Text style={styles.emptyText}>
+                  Add your first subject for the selected semester.
+                </Text>
+              </View>
+            ) : filteredSubjects.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Search size={35} color="#A7B8D7" />
+
+                <Text style={styles.emptyTitle}>
+                  No Matching Subjects
+                </Text>
+
+                <Text style={styles.emptyText}>
+                  Try a different course name, code or subject type.
+                </Text>
+
+                <Pressable
+                  style={styles.clearFiltersButton}
+                  onPress={clearFilters}
+                >
+                  <Text style={styles.clearFiltersText}>
                     Clear Filters
                   </Text>
                 </Pressable>
-              )}
-            </View>
-          </View>
+              </View>
+            ) : (
+              filteredSubjects.map((subject) => (
+                <View
+                  key={subject.id}
+                  style={styles.subjectCard}
+                >
+                  <View style={styles.subjectTop}>
+                    <View style={styles.subjectIcon}>
+                      <BookOpen
+                        size={22}
+                        color={C.blue}
+                      />
+                    </View>
 
-          <View style={styles.resultsHeader}>
-            <Text style={styles.resultsLabel}>
-              {filteredSubjects.length} subject entries
-            </Text>
+                    <View style={styles.subjectInfo}>
+                      <Text style={styles.subjectName}>
+                        {subject.name}
+                      </Text>
 
-            <Text style={styles.resultsHint}>
-              {selectedSemester?.name}
-            </Text>
-          </View>
+                      <Text style={styles.subjectCode}>
+                        {subject.code}
+                      </Text>
+                    </View>
 
-          {semesterSubjects.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <BookOpen size={35} color="#A7B8D7" />
-
-              <Text style={styles.emptyTitle}>
-                No subjects in this semester
-              </Text>
-
-              <Text style={styles.emptyText}>
-                Add your first subject for the selected semester.
-              </Text>
-            </View>
-          ) : filteredSubjects.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Search size={35} color="#A7B8D7" />
-
-              <Text style={styles.emptyTitle}>
-                No Matching Subjects
-              </Text>
-
-              <Text style={styles.emptyText}>
-                Try a different course name, code or subject type.
-              </Text>
-
-              <Pressable
-                style={styles.clearFiltersButton}
-                onPress={clearFilters}
-              >
-                <Text style={styles.clearFiltersText}>
-                  Clear Filters
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            filteredSubjects.map((subject) => (
-              <View
-                key={subject.id}
-                style={styles.subjectCard}
-              >
-                <View style={styles.subjectTop}>
-                  <View style={styles.subjectIcon}>
-                    <BookOpen size={22} color={C.blue} />
-                  </View>
-
-                  <View style={styles.subjectInfo}>
-                    <Text style={styles.subjectName}>
-                      {subject.name}
-                    </Text>
-
-                    <Text style={styles.subjectCode}>
-                      {subject.code}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      subject.type === "Theory"
-                        ? styles.theoryBadge
-                        : styles.practicalBadge,
-                    ]}
-                  >
-                    <Text
+                    <View
                       style={[
-                        styles.typeBadgeText,
+                        styles.typeBadge,
                         subject.type === "Theory"
-                          ? styles.theoryText
-                          : styles.practicalText,
+                          ? styles.theoryBadge
+                          : styles.practicalBadge,
                       ]}
                     >
-                      {subject.type}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.subjectBottom}>
-                  <View style={styles.creditBadge}>
-                    <GraduationCap
-                      size={16}
-                      color={C.blue}
-                    />
-
-                    <Text style={styles.creditText}>
-                      {subject.credits} Credits
-                    </Text>
+                      <Text
+                        style={[
+                          styles.typeBadgeText,
+                          subject.type === "Theory"
+                            ? styles.theoryText
+                            : styles.practicalText,
+                        ]}
+                      >
+                        {subject.type}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.actions}>
-                    <Pressable
-                      style={styles.editButton}
-                      onPress={() => startEdit(subject)}
-                      disabled={
-                        saving || deletingId !== null
-                      }
-                    >
-                      <Pencil size={17} color={C.blue} />
-                    </Pressable>
+                  <View style={styles.subjectBottom}>
+                    <View style={styles.creditBadge}>
+                      <GraduationCap
+                        size={16}
+                        color={C.blue}
+                      />
 
-                    <Pressable
-                      style={styles.deleteButton}
-                      onPress={() =>
-                        removeSubject(subject)
-                      }
-                      disabled={
-                        saving || deletingId !== null
-                      }
-                    >
-                      {deletingId === subject.id ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={C.red}
-                        />
-                      ) : (
-                        <Trash2
+                      <Text style={styles.creditText}>
+                        {subject.credits} Credits
+                      </Text>
+                    </View>
+
+                    <View style={styles.actions}>
+                      <Pressable
+                        style={styles.viewButton}
+                        onPress={() => {
+                          setSelectedSubject(subject);
+                          Keyboard.dismiss();
+                        }}
+                        disabled={saving || deletingId !== null}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View details for ${subject.code}`}
+                      >
+                        <Eye
                           size={17}
-                          color={C.red}
+                          color={C.green}
                         />
-                      )}
-                    </Pressable>
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.editButton}
+                        onPress={() => startEdit(subject)}
+                        disabled={saving || deletingId !== null}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${subject.code}`}
+                      >
+                        <Pencil
+                          size={17}
+                          color={C.blue}
+                        />
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.deleteButton}
+                        onPress={() =>
+                          removeSubject(subject)
+                        }
+                        disabled={saving || deletingId !== null}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${subject.code}`}
+                      >
+                        {deletingId === subject.id ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={C.red}
+                          />
+                        ) : (
+                          <Trash2
+                            size={17}
+                            color={C.red}
+                          />
+                        )}
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
+              ))
+            )}
+
+            <View style={styles.notice}>
+              <BookOpen size={19} color={C.blue} />
+
+              <Text style={styles.noticeText}>
+                Subjects are organized by semester.
+                The same course code can have one Theory
+                and one Practical entry, but duplicate
+                entries of the same type are not allowed.
+              </Text>
+            </View>
+          </>
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={selectedSubject !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedSubject(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setSelectedSubject(null)}
+          />
+
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderIcon}>
+                <BookOpen size={23} color={C.blue} />
               </View>
-            ))
-          )}
 
-          <View style={styles.notice}>
-            <BookOpen size={19} color={C.blue} />
+              <View style={styles.modalHeaderText}>
+                <Text style={styles.modalEyebrow}>
+                  COURSE INFORMATION
+                </Text>
 
-            <Text style={styles.noticeText}>
-              Subjects are organized by semester.
-              The same course code can have one Theory
-              and one Practical entry, but duplicate
-              entries of the same type are not allowed.
-            </Text>
+                <Text style={styles.modalTitle}>
+                  Subject Details
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={() => setSelectedSubject(null)}
+                style={styles.closeButton}
+              >
+                <X size={22} color={C.muted} />
+              </Pressable>
+            </View>
+
+            {selectedSubject && (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.detailsContent}
+              >
+                <Text style={styles.detailCourseName}>
+                  {selectedSubject.name}
+                </Text>
+
+                <Text style={styles.detailCourseCode}>
+                  {selectedSubject.code}
+                </Text>
+
+                <View style={styles.detailsDivider} />
+
+                <Text style={styles.detailLabel}>
+                  Semester
+                </Text>
+
+                <Text style={styles.detailValue}>
+                  {detailsSemester?.name ?? "Unknown"}
+                </Text>
+
+                <Text style={styles.detailSecondary}>
+                  {detailsSemester?.academic_year ?? ""}
+                </Text>
+
+                <Text style={styles.detailLabel}>
+                  Selected Subject Type
+                </Text>
+
+                <View
+                  style={[
+                    styles.detailTypeBadge,
+                    selectedSubject.type === "Theory"
+                      ? styles.theoryBadge
+                      : styles.practicalBadge,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.typeBadgeText,
+                      selectedSubject.type === "Theory"
+                        ? styles.theoryText
+                        : styles.practicalText,
+                    ]}
+                  >
+                    {selectedSubject.type}
+                  </Text>
+                </View>
+
+                <View style={styles.detailsDivider} />
+
+                <Text style={styles.detailsSectionTitle}>
+                  Credit Breakdown
+                </Text>
+
+                <View style={styles.creditRow}>
+                  <Text style={styles.creditRowLabel}>
+                    Theory Credits
+                  </Text>
+
+                  <Text style={styles.creditRowValue}>
+                    {theoryCredits}
+                  </Text>
+                </View>
+
+                <View style={styles.creditRow}>
+                  <Text style={styles.creditRowLabel}>
+                    Practical Credits
+                  </Text>
+
+                  <Text style={styles.creditRowValue}>
+                    {practicalCredits}
+                  </Text>
+                </View>
+
+                <View style={styles.totalCreditCard}>
+                  <View>
+                    <Text style={styles.totalCreditLabel}>
+                      TOTAL COURSE CREDITS
+                    </Text>
+
+                    <Text style={styles.totalCreditHint}>
+                      Theory + Practical
+                    </Text>
+                  </View>
+
+                  <Text style={styles.totalCreditValue}>
+                    {totalCredits}
+                  </Text>
+                </View>
+
+                <Text style={styles.detailNote}>
+                  Credits are calculated using subjects
+                  with the same course code in this semester.
+                </Text>
+
+                <Pressable
+                  style={styles.modalDoneButton}
+                  onPress={() => setSelectedSubject(null)}
+                >
+                  <Check size={18} color={C.white} />
+
+                  <Text style={styles.modalDoneText}>
+                    Done
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            )}
           </View>
-        </>
-      )}
-    </ScrollView>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: C.bg,
+  },
   container: {
     flex: 1,
     backgroundColor: C.bg,
@@ -1478,6 +1703,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 9,
   },
+  viewButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: "#E7F7EE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   editButton: {
     width: 38,
     height: 38,
@@ -1532,5 +1765,162 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: C.white,
+    borderRadius: 23,
+    width: "100%",
+    maxWidth: 480,
+    maxHeight: "85%",
+    overflow: "hidden",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 19,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  modalHeaderIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: C.lightBlue,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalHeaderText: {
+    flex: 1,
+  },
+  modalEyebrow: {
+    color: C.blue,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    marginBottom: 5,
+  },
+  modalTitle: {
+    color: C.navy,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  detailsContent: {
+    padding: 21,
+    paddingBottom: 25,
+  },
+  detailCourseName: {
+    color: C.navy,
+    fontSize: 21,
+    fontWeight: "800",
+  },
+  detailCourseCode: {
+    color: C.blue,
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 8,
+  },
+  detailsDivider: {
+    height: 1,
+    backgroundColor: C.border,
+    marginVertical: 20,
+  },
+  detailLabel: {
+    color: C.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 7,
+  },
+  detailValue: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: "800",
+    marginBottom: 7,
+  },
+  detailSecondary: {
+    color: C.muted,
+    fontSize: 12,
+    marginBottom: 20,
+  },
+  detailTypeBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  detailsSectionTitle: {
+    color: C.navy,
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 17,
+  },
+  creditRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  creditRowLabel: {
+    color: C.muted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  creditRowValue: {
+    color: C.navy,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  totalCreditCard: {
+    backgroundColor: C.lightBlue,
+    borderRadius: 15,
+    padding: 17,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 9,
+  },
+  totalCreditLabel: {
+    color: C.navy,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  totalCreditHint: {
+    color: C.muted,
+    fontSize: 11,
+    marginTop: 6,
+  },
+  totalCreditValue: {
+    color: C.blue,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  detailNote: {
+    color: C.muted,
+    fontSize: 11,
+    lineHeight: 18,
+    marginTop: 15,
+    marginBottom: 22,
+  },
+  modalDoneButton: {
+    backgroundColor: C.blue,
+    padding: 15,
+    borderRadius: 12,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 9,
+  },
+  modalDoneText: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "800",
   },
 });
