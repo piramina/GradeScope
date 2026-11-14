@@ -1,5 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "./semester";
+import { getSharedDatabase } from "./db";
+
 
 export type Subject = {
   id: number;
@@ -19,7 +21,7 @@ export type SubjectInput = {
   type: "Theory" | "Practical";
 };
 
-const database = SQLite.openDatabaseAsync("gradescope.db");
+const database = getSharedDatabase();
 
 let initialization: Promise<void> | null = null;
 

@@ -1,5 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { getSubjects } from "./subject";
+import { getSharedDatabase } from "./db";
+
 
 export const GRADE_POINTS = {
   "A+": 4.0,
@@ -35,7 +37,7 @@ export type GPASummary = {
   courses: number;
 };
 
-const database = SQLite.openDatabaseAsync("gradescope.db");
+const database = getSharedDatabase();
 
 let initialized: Promise<void> | null = null;
 

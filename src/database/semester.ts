@@ -1,4 +1,5 @@
-import * as SQLite from "expo-sqlite";
+
+import { getSharedDatabase } from "./db";
 
 export type Semester = {
   id: number;
@@ -7,44 +8,64 @@ export type Semester = {
   created_at: string;
 };
 
-const database = SQLite.openDatabaseAsync("gradescope.db");
+const database = getSharedDatabase();
 
-export async function initDatabase() {
-  const db = await database;
+let initialization: Promise<void> | null = null;
 
-  await db.execAsync(`
-    PRAGMA journal_mode = WAL;
+export function initDatabase(): Promise<void> {
+  if (!initialization) {
+    initialization = (async () => {
+      const db = await database;
 
-    CREATE TABLE IF NOT EXISTS semesters (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      academic_year TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS semesters (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          academic_year TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    })().catch((error) => {
+      initialization = null;
+      throw error;
+    });
+  }
+
+  return initialization;
 }
 
 export async function getSemesters(): Promise<Semester[]> {
+  await initDatabase();
+
   const db = await database;
 
-  return db.getAllAsync<Semester>("SELECT * FROM semesters ORDER BY id DESC");
+  return db.getAllAsync<Semester>(
+    "SELECT * FROM semesters ORDER BY id DESC"
+  );
 }
 
-export async function addSemester(name: string, academicYear: string) {
+export async function addSemester(
+  name: string,
+  academicYear: string
+) {
+  await initDatabase();
+
   const db = await database;
 
   return db.runAsync(
     "INSERT INTO semesters (name, academic_year) VALUES (?, ?)",
     name.trim(),
-    academicYear.trim(),
+    academicYear.trim()
   );
 }
 
 export async function updateSemester(
   id: number,
   name: string,
-  academicYear: string,
+  academicYear: string
 ) {
+  await initDatabase();
+
   const db = await database;
 
   return db.runAsync(
@@ -53,12 +74,17 @@ export async function updateSemester(
      WHERE id = ?`,
     name.trim(),
     academicYear.trim(),
-    id,
+    id
   );
 }
 
 export async function deleteSemester(id: number) {
+  await initDatabase();
+
   const db = await database;
 
-  return db.runAsync("DELETE FROM semesters WHERE id = ?", id);
+  return db.runAsync(
+    "DELETE FROM semesters WHERE id = ?",
+    id
+  );
 }

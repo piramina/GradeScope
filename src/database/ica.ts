@@ -1,5 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { getSubjects } from "./subject";
+import { getSharedDatabase } from "./db";
+
 
 export type ICARecord = {
   id: number;
@@ -12,7 +14,7 @@ export type ICARecord = {
   type: "Theory" | "Practical";
 };
 
-const database = SQLite.openDatabaseAsync("gradescope.db");
+const database = getSharedDatabase();
 
 async function getDB() {
   await getSubjects();

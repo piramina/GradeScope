@@ -15,12 +15,12 @@ import * as SQLite from "expo-sqlite";
 
 import WelcomeGate from "@/components/welcome-gate";
 
+import { getSharedDatabase } from "../database/db";
+
 type AppState = "loading" | "welcome" | "ready" | "error";
 
-const database = SQLite.openDatabaseAsync("gradescope.db");
+const database = getSharedDatabase();
 
-// Keep false for normal app usage.
-// True is only for temporary Welcome screen preview.
 const DEV_PREVIEW_WELCOME = false;
 
 async function readWelcomeStatus(): Promise<boolean> {
