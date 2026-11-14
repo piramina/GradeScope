@@ -184,7 +184,7 @@ export default function RootLayout() {
         <Stack.Screen
           name="explore"
           options={{
-            title: "Explore",
+            title: "Performance Analysis",
             headerShown: true,
           }}
         />
