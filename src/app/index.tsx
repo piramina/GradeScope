@@ -1,3 +1,4 @@
+
 import { router, useFocusEffect } from "expo-router";
 import {
   ArrowUpRight,
@@ -15,7 +16,6 @@ import {
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -26,10 +26,12 @@ import {
 } from "react-native";
 
 import { getSemesters, type Semester } from "../database/semester";
-
 import { getSubjects, type Subject } from "../database/subject";
-
-import { calculateGPA, getGPARecords, type GPARecord } from "../database/gpa";
+import {
+  calculateGPA,
+  getGPARecords,
+  type GPARecord,
+} from "../database/gpa";
 
 const C = {
   navy: "#142D60",
@@ -62,6 +64,37 @@ const initialData: DashboardData = {
   totalCourses: 0,
 };
 
+const actions = [
+  {
+    title: "ICA Calculator",
+    subtitle: "Calculate your best 2 ICA marks",
+    icon: Calculator,
+    background: "#EAF1FF",
+    route: "/ica" as const,
+  },
+  {
+    title: "Final Exam Predictor",
+    subtitle: "Calculate required final exam marks",
+    icon: Target,
+    background: "#F3ECFF",
+    route: "/predictor" as const,
+  },
+  {
+    title: "GPA & CGPA",
+    subtitle: "Calculate your academic GPA",
+    icon: GraduationCap,
+    background: "#E8F8F1",
+    route: "/gpa" as const,
+  },
+  {
+    title: "Performance Analysis",
+    subtitle: "Explore academic progress",
+    icon: TrendingUp,
+    background: "#FFF4E5",
+    route: "/explore" as const,
+  },
+];
+
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData>(initialData);
   const [loading, setLoading] = useState(true);
@@ -76,32 +109,63 @@ export default function Dashboard() {
         Semester[],
         Subject[],
         GPARecord[],
-      ] = await Promise.all([getSemesters(), getSubjects(), getGPARecords()]);
+      ] = await Promise.all([
+        getSemesters(),
+        getSubjects(),
+        getGPARecords(),
+      ]);
 
-      const overall = calculateGPA(records);
+      const courseCredits = new Map<string, number>();
 
-      const courseKeys = new Set(
-        subjects.map(
-          (subject) =>
-            `${subject.semester_id}:${subject.code.trim().toUpperCase()}`,
-        ),
-      );
+      for (const subject of subjects) {
+        const key = `${subject.semester_id}:${subject.code
+          .trim()
+          .toUpperCase()}`;
+
+        const previous = courseCredits.get(key) ?? 0;
+
+        courseCredits.set(
+          key,
+          previous + Number(subject.credits),
+        );
+      }
+
+      const calculatedRecords = records.map((record) => {
+        const key = `${record.semester_id}:${record.course_code
+          .trim()
+          .toUpperCase()}`;
+
+        const credits = courseCredits.get(key);
+
+        return credits === undefined
+          ? record
+          : { ...record, credits };
+      });
+
+      const overall = calculateGPA(calculatedRecords);
 
       const recordedKeys = new Set(
         records.map(
           (record) =>
-            `${record.semester_id}:${record.course_code.trim().toUpperCase()}`,
+            `${record.semester_id}:${record.course_code
+              .trim()
+              .toUpperCase()}`,
         ),
       );
 
-      const recordedCourses = [...recordedKeys].filter((key) =>
-        courseKeys.has(key),
+      const recordedCourses = [...recordedKeys].filter(
+        (key) => courseCredits.has(key),
       ).length;
 
-      const latestSemester = [...semesters].sort((a, b) => b.id - a.id)[0];
+      const latestSemester = [...semesters].sort(
+        (a, b) => b.id - a.id,
+      )[0];
 
       const latestRecords = latestSemester
-        ? records.filter((record) => record.semester_id === latestSemester.id)
+        ? calculatedRecords.filter(
+            (record) =>
+              record.semester_id === latestSemester.id,
+          )
         : [];
 
       const latest = calculateGPA(latestRecords);
@@ -111,9 +175,9 @@ export default function Dashboard() {
         latestGPA: latest.gpa,
         credits: overall.credits,
         semesterCount: semesters.length,
-        subjectCount: courseKeys.size,
+        subjectCount: courseCredits.size,
         recordedCourses,
-        totalCourses: courseKeys.size,
+        totalCourses: courseCredits.size,
       });
     } catch (err) {
       console.error("Dashboard load error:", err);
@@ -135,54 +199,20 @@ export default function Dashboard() {
     void loadDashboard();
   };
 
-  const comingSoon = (title: string) => {
-    Alert.alert(
-      "Coming Soon",
-      `${title} will be available in the next development stage.`,
-    );
-  };
-
-  const actions = [
-    {
-      title: "ICA Calculator",
-      subtitle: "Calculate your best 2 ICA marks",
-      icon: Calculator,
-      background: "#EAF1FF",
-      route: "/ica" as const,
-    },
-    {
-      title: "Final Exam Predictor",
-      subtitle: "Calculate required final exam marks",
-      icon: Target,
-      background: "#F3ECFF",
-      route: "/predictor" as const,
-    },
-    {
-      title: "GPA & CGPA",
-      subtitle: "Calculate your academic GPA",
-      icon: GraduationCap,
-      background: "#E8F8F1",
-      route: "/gpa" as const,
-    },
-    {
-      title: "Performance Analysis",
-      subtitle: "Explore academic progress",
-      icon: TrendingUp,
-      background: "#FFF4E5",
-      route: null,
-    },
-  ];
-
   const progress =
     data.totalCourses > 0
-      ? Math.round((data.recordedCourses / data.totalCourses) * 100)
+      ? Math.round(
+          (data.recordedCourses / data.totalCourses) * 100,
+        )
       : 0;
 
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={C.blue} />
-        <Text style={styles.loadingText}>Loading GradeScope...</Text>
+        <Text style={styles.loadingText}>
+          Loading GradeScope...
+        </Text>
       </View>
     );
   }
@@ -204,9 +234,13 @@ export default function Dashboard() {
       >
         <View style={styles.header}>
           <View style={styles.headerText}>
-            <Text style={styles.greeting}>Welcome back 👋</Text>
+            <Text style={styles.greeting}>
+              Welcome back 👋
+            </Text>
 
-            <Text style={styles.heading}>GradeScope</Text>
+            <Text style={styles.heading}>
+              GradeScope
+            </Text>
 
             <Text style={styles.subheading}>
               Your academic journey, simplified.
@@ -224,19 +258,28 @@ export default function Dashboard() {
             onPress={() => void loadDashboard()}
           >
             <RefreshCw size={18} color="#C43C3C" />
-            <Text style={styles.errorText}>{error} Tap to retry.</Text>
+
+            <Text style={styles.errorText}>
+              {error} Tap to retry.
+            </Text>
           </Pressable>
         )}
 
         <View style={styles.hero}>
           <View style={styles.heroTop}>
             <View>
-              <Text style={styles.heroLabel}>OVERALL CGPA</Text>
+              <Text style={styles.heroLabel}>
+                OVERALL CGPA
+              </Text>
 
               <Text style={styles.heroValue}>
-                {data.cgpa === null ? "—" : data.cgpa.toFixed(2)}
+                {data.cgpa === null
+                  ? "—"
+                  : data.cgpa.toFixed(2)}
 
-                <Text style={styles.heroMax}> / 4.00</Text>
+                <Text style={styles.heroMax}>
+                  {" "}/ 4.00
+                </Text>
               </Text>
             </View>
 
@@ -255,23 +298,33 @@ export default function Dashboard() {
 
           <View style={styles.heroBottom}>
             <View style={styles.heroMetric}>
-              <Text style={styles.heroSmallLabel}>Last Added Semester GPA</Text>
+              <Text style={styles.heroSmallLabel}>
+                Last Added Semester GPA
+              </Text>
 
               <Text style={styles.heroSmallValue}>
-                {data.latestGPA === null ? "—" : data.latestGPA.toFixed(2)}
+                {data.latestGPA === null
+                  ? "—"
+                  : data.latestGPA.toFixed(2)}
               </Text>
             </View>
 
             <View style={styles.heroMetric}>
-              <Text style={styles.heroSmallLabel}>Recorded Credits</Text>
+              <Text style={styles.heroSmallLabel}>
+                Recorded Credits
+              </Text>
 
-              <Text style={styles.heroSmallValue}>{data.credits}</Text>
+              <Text style={styles.heroSmallValue}>
+                {data.credits}
+              </Text>
             </View>
           </View>
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Academic Overview</Text>
+          <Text style={styles.sectionTitle}>
+            Academic Overview
+          </Text>
 
           <ArrowUpRight size={19} color={C.blue} />
         </View>
@@ -285,9 +338,13 @@ export default function Dashboard() {
               <CalendarDays size={22} color={C.blue} />
             </View>
 
-            <Text style={styles.statValue}>{data.semesterCount}</Text>
+            <Text style={styles.statValue}>
+              {data.semesterCount}
+            </Text>
 
-            <Text style={styles.statLabel}>Semesters</Text>
+            <Text style={styles.statLabel}>
+              Semesters
+            </Text>
           </Pressable>
 
           <Pressable
@@ -298,15 +355,19 @@ export default function Dashboard() {
               <BookOpen size={22} color={C.blue} />
             </View>
 
-            <Text style={styles.statValue}>{data.subjectCount}</Text>
+            <Text style={styles.statValue}>
+              {data.subjectCount}
+            </Text>
 
-            <Text style={styles.statLabel}>Unique Courses</Text>
+            <Text style={styles.statLabel}>
+              Unique Courses
+            </Text>
           </Pressable>
         </View>
 
         <View style={styles.progressCard}>
           <View style={styles.progressHeader}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.progressTitle}>
                 Academic Results Progress
               </Text>
@@ -316,11 +377,18 @@ export default function Dashboard() {
               </Text>
             </View>
 
-            <Text style={styles.progressPercent}>{progress}%</Text>
+            <Text style={styles.progressPercent}>
+              {progress}%
+            </Text>
           </View>
 
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${progress}%` },
+              ]}
+            />
           </View>
         </View>
 
@@ -336,7 +404,9 @@ export default function Dashboard() {
           </View>
 
           <View style={styles.manageText}>
-            <Text style={styles.manageTitle}>Manage Semesters</Text>
+            <Text style={styles.manageTitle}>
+              Manage Semesters
+            </Text>
 
             <Text style={styles.manageSubtitle}>
               Add, edit and organize your semesters
@@ -358,7 +428,9 @@ export default function Dashboard() {
           </View>
 
           <View style={styles.manageText}>
-            <Text style={styles.manageTitle}>Manage Subjects</Text>
+            <Text style={styles.manageTitle}>
+              Manage Subjects
+            </Text>
 
             <Text style={styles.manageSubtitle}>
               Add subjects, credits and assessment types
@@ -369,7 +441,9 @@ export default function Dashboard() {
         </Pressable>
 
         <View style={styles.quickHeader}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>
+            Quick Actions
+          </Text>
         </View>
 
         {actions.map((action) => {
@@ -378,13 +452,7 @@ export default function Dashboard() {
           return (
             <Pressable
               key={action.title}
-              onPress={() => {
-                if (action.route) {
-                  router.push(action.route);
-                } else {
-                  comingSoon(action.title);
-                }
-              }}
+              onPress={() => router.push(action.route)}
               style={({ pressed }) => [
                 styles.actionCard,
                 pressed && styles.pressed,
@@ -393,19 +461,28 @@ export default function Dashboard() {
               <View
                 style={[
                   styles.actionIcon,
-                  { backgroundColor: action.background },
+                  {
+                    backgroundColor: action.background,
+                  },
                 ]}
               >
                 <Icon size={23} color={C.blue} />
               </View>
 
               <View style={styles.actionText}>
-                <Text style={styles.actionTitle}>{action.title}</Text>
+                <Text style={styles.actionTitle}>
+                  {action.title}
+                </Text>
 
-                <Text style={styles.actionSubtitle}>{action.subtitle}</Text>
+                <Text style={styles.actionSubtitle}>
+                  {action.subtitle}
+                </Text>
               </View>
 
-              <ChevronRight size={20} color="#9AA7BB" />
+              <ChevronRight
+                size={20}
+                color="#9AA7BB"
+              />
             </Pressable>
           );
         })}
@@ -426,7 +503,9 @@ export default function Dashboard() {
           </View>
         </View>
 
-        <Text style={styles.footer}>Keep learning. Keep improving. 🎓</Text>
+        <Text style={styles.footer}>
+          Keep learning. Keep improving. 🎓
+        </Text>
       </ScrollView>
     </View>
   );
