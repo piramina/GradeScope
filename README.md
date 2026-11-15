@@ -125,10 +125,30 @@ npx expo start
 
 ### 5. Run on Android
 
-1. Connect the computer and Android device to the same Wi-Fi network.
-2. Open Expo Go on the Android device.
-3. Scan the QR code displayed in the terminal.
-4. The GradeScope application will open on your phone.
+1. Install **Expo Go** from the Google Play Store.
+2. Connect your laptop and Android phone to the same Wi-Fi network.
+3. Open the GradeScope project in VS Code.
+4. Start the development server:
+
+   ```bash
+   npx expo start
+   ```
+
+5. Open **Expo Go** on your Android phone.
+6. Select **Scan QR Code** and scan the QR code displayed in the terminal.
+7. The GradeScope application will open on your device.
+
+### If a Network Error Occurs
+
+Stop the server using `Ctrl + C`, then run:
+
+```bash
+npx expo start --tunnel
+```
+
+Scan the new QR code using Expo Go.
+
+**Note:** Tunnel mode requires an internet connection.
 
 ### TypeScript Validation
 
